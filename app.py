@@ -41,8 +41,9 @@ if course_file and degree_file:
             course_df = course_df.rename(columns={"Course": "Course Code"})
             full = pd.merge(eleceng, course_df, on="Course Code", how="left")
 
-            # ✅ CORE COURSES (not tech electives)
-            core_missing = full[(full["Flag"] != 1) & (~full["Type"].isin(["tech elective A", "tech elective B"]))]
+            # ✅ CORE COURSES (not tech electives) – only rows 19 to 70
+            core_section = full.iloc[18:70]
+            core_missing = core_section[(core_section["Flag"] != 1) & (~core_section["Type"].isin(["tech elective A", "tech elective B"]))]
 
             # ✅ TECH ELECTIVES (taken only)
             tech_taken = full[
@@ -59,11 +60,11 @@ if course_file and degree_file:
             missing_400 = max(0, 5 - taken_400)
 
             # 🎓 CORE
-            st.subheader("📋 Missing Core Courses")
+            st.subheader("📋 Missing Core Courses (Row 19–70 Only)")
             if len(core_missing) > 0:
                 st.dataframe(core_missing[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions", "Type"]])
             else:
-                st.success("✅ No missing core courses!")
+                st.success("✅ No missing core courses in the selected range!")
 
             # 📊 TECH ELECTIVE SUMMARY
             st.subheader("🧮 Technical Elective Summary")
