@@ -14,26 +14,36 @@ if course_file and degree_file:
         eleceng = degree_df['ElecEng']
 
         try:
-            # Set row 35 (index 35) as header
-            new_header = eleceng.iloc[35].fillna("").astype(str).tolist()
+            # Set row 35 as header
+            raw_headers = eleceng.iloc[35].fillna("").astype(str).tolist()
+
+            # Deduplicate headers like ['AU', 'AU'] → ['AU', 'AU_1']
+            seen = {}
+            def dedup(col):
+                if col not in seen:
+                    seen[col] = 0
+                    return col
+                else:
+                    seen[col] += 1
+                    return f"{col}_{seen[col]}"
+            cleaned_headers = [dedup(col.strip() if col.strip() else f"col_{i}") for i, col in enumerate(raw_headers)]
+
             eleceng = eleceng.iloc[36:].reset_index(drop=True)
-            eleceng.columns = [f"col_{i}" if col.strip() == "" else col.strip() for i, col in enumerate(new_header)]
+            eleceng.columns = cleaned_headers
 
-            # Rename the first column to 'Course'
-            eleceng.rename(columns={eleceng.columns[0]: 'Course'}, inplace=True)
+            # Rename first column to 'Course' if needed
+            if cleaned_headers[0] != "Course":
+                eleceng.rename(columns={cleaned_headers[0]: 'Course'}, inplace=True)
 
-            # Ensure 'Course' and 'Flag' columns exist
+            # Proceed only if 'Course' and 'Flag' exist
             if 'Course' in eleceng.columns and 'Flag' in eleceng.columns:
-                # Filter for missing courses
                 eleceng = eleceng[eleceng['Course'].notna()]
                 eleceng = eleceng[eleceng['Flag'] != 1]
                 eleceng['Course Code'] = eleceng['Course'].astype(str).str.extract(r'^([A-Z]+\\s*\\d+)', expand=False)
 
-                # Normalize course info
                 course_df.columns = [col.strip().capitalize() for col in course_df.columns]
                 course_df = course_df.rename(columns={"Course": "Course Code"})
 
-                # Merge missing courses with prerequisite info
                 merged = pd.merge(eleceng, course_df[['Course Code', 'Prerequisite', 'Type']], on='Course Code', how='left')
 
                 st.subheader("📋 Missing Courses with Prerequisites")
