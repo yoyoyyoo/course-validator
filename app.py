@@ -29,7 +29,7 @@ if course_file and degree_file:
             eleceng.columns = headers
             eleceng.rename(columns={"col_0": "Course"}, inplace=True)
 
-            # Remove subtotal, core, flag rows
+            # Remove subtotal/core/flag rows
             eleceng = eleceng[eleceng["Course"].notna()]
             eleceng = eleceng[~eleceng["Course"].str.contains("subtotal|core|flag", case=False, na=False)]
 
@@ -41,11 +41,16 @@ if course_file and degree_file:
             course_df = course_df.rename(columns={"Course": "Course Code"})
             full = pd.merge(eleceng, course_df, on="Course Code", how="left")
 
-            # ✅ CORE COURSES
+            # ✅ CORE COURSES (not tech electives)
             core_missing = full[(full["Flag"] != 1) & (~full["Type"].isin(["tech elective A", "tech elective B"]))]
 
-            # ✅ TECH ELECTIVES (taken)
-            tech_taken = full[(full["Flag"] == 1) & (full["Type"].isin(["tech elective A", "tech elective B"]))].copy()
+            # ✅ TECH ELECTIVES (taken only)
+            tech_taken = full[
+                (full["Flag"] == 1) &
+                (full["Type"].isin(["tech elective A", "tech elective B"])) &
+                (full["Course Code"].notna())
+            ].copy()
+
             tech_taken["Level"] = tech_taken["Course Code"].str.extract(r'(\d{3})').astype(float)
             tech_taken["Level Tag"] = tech_taken["Level"].apply(lambda x: f"{int(x)}xx" if pd.notna(x) else "Unknown")
 
