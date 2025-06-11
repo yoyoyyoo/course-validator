@@ -14,7 +14,7 @@ if course_file and degree_file:
         eleceng = degree_df['ElecEng']
 
         try:
-            # Parse and clean header row at Excel row 36
+            # Parse and deduplicate headers (row 36 in Excel = iloc[35])
             raw_headers = eleceng.iloc[35].fillna("").astype(str).tolist()
             seen = {}
             def dedup(col):
@@ -29,51 +29,54 @@ if course_file and degree_file:
             eleceng.columns = headers
             eleceng.rename(columns={"col_0": "Course"}, inplace=True)
 
-            # Remove subtotal/core/flag rows
+            # Clean non-course rows
             eleceng = eleceng[eleceng["Course"].notna()]
             eleceng = eleceng[~eleceng["Course"].str.contains("subtotal|core|flag", case=False, na=False)]
 
             # Extract course code
             eleceng["Course Code"] = eleceng["Course"].astype(str).str.extract(r'^([A-Z]+\s*\d+)', expand=False)
 
-            # Normalize course info
+            # Load course info and normalize
             course_df.columns = [col.strip().capitalize() for col in course_df.columns]
             course_df = course_df.rename(columns={"Course": "Course Code"})
             full = pd.merge(eleceng, course_df, on="Course Code", how="left")
 
-            # ✅ CORE COURSES (only Excel row 19–70 = iloc[18:70])
+            # ✅ Core courses: only rows 19–70 (Excel), drop None Course Codes
             core_section = full.iloc[18:70]
-            core_missing = core_section[(core_section["Flag"] != 1)]
+            core_missing = core_section[
+                (core_section["Flag"] != 1) & 
+                (core_section["Course Code"].notna())
+            ]
 
-            # ✅ TECH ELECTIVES (Flag == 1 only)
+            # ✅ Tech electives (count only)
             tech_taken = full[
                 (full["Flag"] == 1) &
                 (full["Type"].isin(["tech elective A", "tech elective B"])) &
                 (full["Course Code"].notna())
             ].copy()
             tech_taken["Level"] = tech_taken["Course Code"].str.extract(r'(\d{3})').astype(float)
-            tech_taken["Level Tag"] = tech_taken["Level"].apply(lambda x: f"{int(x)}xx" if pd.notna(x) else "Unknown")
 
             total_taken = len(tech_taken)
             taken_400 = (tech_taken["Level"] >= 400).sum()
 
-            # 🎓 Show missing core courses
+            # 🎓 Display missing core courses
             st.subheader("📋 Missing Required Core Courses (Rows 19–70)")
             if len(core_missing) > 0:
                 st.dataframe(core_missing[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions", "Type"]])
             else:
                 st.success("✅ All required core courses completed!")
 
-            # 📊 Show tech electives taken
+            # 📊 Elective summary only (no table)
             st.subheader("🧮 Technical Elective Summary")
             st.markdown(f"""
             - ✅ Total technical electives taken: **{total_taken}**
             - ✅ Number of 400-level electives: **{taken_400}**
             """)
 
-            if total_taken > 0:
-                st.subheader("✅ Completed Technical Electives")
-                st.dataframe(tech_taken[["Course Code", "Name", "Level Tag", "Type"]])
+            if total_taken < 5:
+                st.warning("⚠️ Minimum 5 technical electives required.")
+            if taken_400 < 5:
+                st.warning("⚠️ Minimum 5 must be at 400-level or above.")
 
         except Exception as e:
             st.error(f"Error processing file: {e}")
