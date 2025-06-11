@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-st.title("Technical Elective Validator")
+st.title("Course Progress Validator")
 
 course_file = st.file_uploader("Upload Course Info Excel", type=["xlsx"])
 degree_file = st.file_uploader("Upload Degree Plan Excel", type=["xlsx"])
@@ -14,7 +14,7 @@ if course_file and degree_file:
         eleceng = degree_df['ElecEng']
 
         try:
-            # Set row 35 as header and deduplicate
+            # Load header at row 35
             raw_headers = eleceng.iloc[35].fillna("").astype(str).tolist()
             seen = {}
             def dedup(col):
@@ -23,44 +23,49 @@ if course_file and degree_file:
                     return col
                 seen[col] += 1
                 return f"{col}_{seen[col]}"
-            headers = [dedup(col.strip() or f"col_{i}") for i, col in enumerate(raw_headers)]
+            headers = [dedup(col.strip() if col.strip() else f"col_{i}") for i, col in enumerate(raw_headers)]
 
             eleceng = eleceng.iloc[36:].reset_index(drop=True)
             eleceng.columns = headers
-            if headers[0] != "Course":
-                eleceng.rename(columns={headers[0]: "Course"}, inplace=True)
+            eleceng = eleceng.rename(columns={"col_0": "Course"})
 
-            # Filter missing courses
-            if 'Course' in eleceng.columns and 'Flag' in eleceng.columns:
-                eleceng = eleceng[eleceng['Course'].notna()]
-                missing = eleceng[eleceng['Flag'] != 1].copy()
-                missing['Course Code'] = missing['Course'].astype(str).str.extract(r'^([A-Z]+\\s*\\d+)', expand=False)
+            # Filter valid rows
+            eleceng = eleceng[eleceng["Course"].notna()]
+            missing_courses = eleceng[eleceng["Flag"] != 1].copy()
+            missing_courses["Course Code"] = missing_courses["Course"].astype(str).str.extract(r'^([A-Z]+\s*\d+)', expand=False)
 
-                # Clean and merge course info
-                course_df.columns = [col.strip().capitalize() for col in course_df.columns]
-                course_df = course_df.rename(columns={"Course": "Course Code"})
+            # Normalize course info
+            course_df.columns = [col.strip().capitalize() for col in course_df.columns]
+            course_df = course_df.rename(columns={"Course": "Course Code"})
 
-                tech_courses = course_df[course_df['Type'].isin(['A', 'B'])].copy()
-                merged = pd.merge(missing, tech_courses, on='Course Code', how='inner')
+            # Merge to get full course info
+            merged = pd.merge(missing_courses, course_df, on="Course Code", how="left")
 
-                # Count how many are 400-level+
-                merged['Level'] = merged['Course Code'].str.extract(r'(\d{3})').astype(float)
-                total_missing = len(merged)
-                missing_400 = (merged['Level'] >= 400).sum()
+            # Split core vs tech elective
+            tech_missing = merged[merged["Type"].isin(["A", "B"])].copy()
+            core_missing = merged[~merged["Type"].isin(["A", "B"])].copy()
 
-                # Display summary
-                st.info(f"📌 You are missing {total_missing} technical electives.")
-                st.info(f"✅ Of these, {missing_400} are 400-level or higher.")
-                if total_missing < 5:
-                    st.warning("⚠️ Students must complete at least 5 technical electives.")
-                if missing_400 < 4:
-                    st.warning("⚠️ Students must include at least 4 technical electives at the 400 level or higher.")
+            # Count 400-level electives
+            tech_missing["Level"] = tech_missing["Course Code"].str.extract(r'(\d{3})').astype(float)
+            total_tech = len(tech_missing)
+            total_400 = (tech_missing["Level"] >= 400).sum()
 
-                # Show selected columns
-                st.subheader("📋 Missing Technical Electives")
-                st.dataframe(merged[['Course Code', 'Name', 'Prerequisite', 'Corequisite', 'Exclusions', 'Type']])
+            # Show stats
+            st.subheader("📊 Technical Elective Summary")
+            st.write(f"🔹 Missing technical electives: **{total_tech}**")
+            st.write(f"🔹 400-level or higher: **{total_400}**")
+            if total_tech < 5:
+                st.warning("⚠️ Students must complete at least **5** technical electives.")
+            if total_400 < 4:
+                st.warning("⚠️ At least **4** technical electives must be at the 400 level or above.")
+
+            # Show core missing list
+            st.subheader("📋 Missing Core Courses")
+            if len(core_missing) > 0:
+                st.dataframe(core_missing[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions", "Type"]])
             else:
-                st.error("Missing 'Course' or 'Flag' columns.")
+                st.success("✅ No missing core courses detected!")
+
         except Exception as e:
             st.error(f"Error processing file: {e}")
     else:
