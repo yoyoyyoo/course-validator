@@ -81,4 +81,4 @@ if course_file and degree_file:
         except Exception as e:
             st.error(f"Error processing file: {e}")
     else:
-        st.error("Sheet 'ElecEng' not found in the uploaded degree plan.")
+        st.error("Sheet 'ElecEng' not found in the uploaded degree plan.") 
