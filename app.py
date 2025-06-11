@@ -14,7 +14,7 @@ if course_file and degree_file:
         eleceng = degree_df['ElecEng']
 
         try:
-            # Clean headers
+            # Clean and deduplicate header row (row 35)
             raw_headers = eleceng.iloc[35].fillna("").astype(str).tolist()
             seen = {}
             def dedup(col):
@@ -29,56 +29,55 @@ if course_file and degree_file:
             eleceng.columns = headers
             eleceng.rename(columns={"col_0": "Course"}, inplace=True)
 
-            # Filter out non-course rows
+            # Remove subtotal, core, flag rows
             eleceng = eleceng[eleceng["Course"].notna()]
             eleceng = eleceng[~eleceng["Course"].str.contains("subtotal|core|flag", case=False, na=False)]
 
             # Extract course code
             eleceng["Course Code"] = eleceng["Course"].astype(str).str.extract(r'^([A-Z]+\s*\d+)', expand=False)
 
-            # Load course info and normalize
+            # Normalize course info
             course_df.columns = [col.strip().capitalize() for col in course_df.columns]
             course_df = course_df.rename(columns={"Course": "Course Code"})
             full = pd.merge(eleceng, course_df, on="Course Code", how="left")
 
-            ### ✅ CORE COURSES (non-tech electives) - Missing only
-            core_missing = full[(full["Flag"] != 1) & (~full["Type"].isin(["A", "B"]))]
+            # ✅ CORE COURSES
+            core_missing = full[(full["Flag"] != 1) & (~full["Type"].isin(["tech elective A", "tech elective B"]))]
 
-            ### ✅ TECH ELECTIVES (Taken, Type A or B)
-            tech_taken = full[(full["Flag"] == 1) & (full["Type"].isin(["A", "B"]))].copy()
+            # ✅ TECH ELECTIVES (taken)
+            tech_taken = full[(full["Flag"] == 1) & (full["Type"].isin(["tech elective A", "tech elective B"]))].copy()
             tech_taken["Level"] = tech_taken["Course Code"].str.extract(r'(\d{3})').astype(float)
             tech_taken["Level Tag"] = tech_taken["Level"].apply(lambda x: f"{int(x)}xx" if pd.notna(x) else "Unknown")
 
-            count_total = len(tech_taken)
-            count_400 = (tech_taken["Level"] >= 400).sum()
-            missing_400 = max(0, 5 - int(count_400))
+            total_taken = len(tech_taken)
+            taken_400 = (tech_taken["Level"] >= 400).sum()
+            missing_400 = max(0, 5 - taken_400)
 
-            ### ✅ Display: Core Missing
+            # 🎓 CORE
             st.subheader("📋 Missing Core Courses")
             if len(core_missing) > 0:
                 st.dataframe(core_missing[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions", "Type"]])
             else:
-                st.success("✅ No missing core courses detected!")
+                st.success("✅ No missing core courses!")
 
-            ### ✅ Display: Technical Elective Summary
+            # 📊 TECH ELECTIVE SUMMARY
             st.subheader("🧮 Technical Elective Summary")
             st.markdown(f"""
-                - ✅ **Taken technical electives (A + B)**: **{count_total}**
-                - ✅ **At 400-level or higher**: **{int(count_400)}**
-                - 🔸 **Still need {missing_400} more at 400-level** to meet minimum of 5
+            - ✅ Taken: **{total_taken}**
+            - ✅ 400-level or above: **{taken_400}**
+            - ❗ Still need **{missing_400}** more at 400-level to reach the required 5
             """)
 
-            if count_total < 5:
-                st.warning("⚠️ You must complete **at least 5** technical electives.")
-            if count_400 < 5:
-                st.warning(f"⚠️ You must complete **at least 5** at the 400 level or higher.")
+            if total_taken < 5:
+                st.warning("⚠️ You must complete **at least 5 technical electives.**")
+            if taken_400 < 5:
+                st.warning("⚠️ You must complete **at least 5 technical electives at 400-level or above.**")
 
-            ### ✅ Show taken tech electives
-            if count_total > 0:
+            if total_taken > 0:
                 st.subheader("✅ Completed Technical Electives")
-                st.dataframe(tech_taken[["Course Code", "Name", "Level Tag", "Type", "Prerequisite", "Corequisite", "Exclusions"]])
+                st.dataframe(tech_taken[["Course Code", "Name", "Level Tag", "Type"]])
 
         except Exception as e:
             st.error(f"Error processing file: {e}")
     else:
-        st.error("Sheet 'ElecEng' not found in the uploaded degree plan.") 
+        st.error("Sheet 'ElecEng' not found in the uploaded degree plan.")
