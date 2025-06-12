@@ -6,7 +6,6 @@ st.set_page_config(page_title="EE Course Validator", layout="centered")
 st.title("📘 Electrical Engineering Course Validator")
 
 def find_section_index(df, keyword):
-    """Find the first row index containing the keyword in column 0."""
     for i in range(len(df)):
         val = str(df.iloc[i, 0])
         if keyword.lower() in val.lower():
@@ -51,7 +50,7 @@ if course_file and degree_file:
 
         df = pd.read_excel(degree_file, sheet_name="ElecEng", header=None)
 
-        # --- Identify sections dynamically ---
+        # Section markers
         common_core_start = find_section_index(df, "Common core - 1st year")
         program_core_start = find_section_index(df, "Program core - 2nd/3rd-year")
         technical_core_start = find_section_index(df, "Technical core - 4th year")
@@ -60,19 +59,21 @@ if course_file and degree_file:
         tech_electives_start = find_section_index(df, "Technical Electives")
         tech_electives_end = find_section_index(df, "Capstone Design Project") or len(df)
 
-        # --- Extract sections ---
+        # Extract sections
         core1_df = extract_section(df, common_core_start + 1, program_core_start)
         core2_df = extract_section(df, program_core_start + 2, technical_core_start)
         complementary_df = extract_section(df, complementary_start + 1, complementary_end, header_offset=1)
         tech_df = extract_section(df, tech_electives_start + 1, tech_electives_end, header_offset=1)
 
-        # --- Missing Core Courses ---
+        # Missing core courses
         merge_missing_courses(core1_df, course_df, "Missing Common Core Courses")
         merge_missing_courses(core2_df, course_df, "Missing ELEC Core Courses")
 
-        # --- Complementary Studies ---
+        # Complementary Studies (FIXED)
         st.subheader("📘 Complementary Studies")
-        complementary_taken = complementary_df[complementary_df["Flag"] == 1]
+        complementary_taken = complementary_df[
+            (complementary_df["Flag"] == 1) & (complementary_df["Course Code"].notna())
+        ]
         taken_comp = len(complementary_taken)
         missing_comp = max(0, 3 - taken_comp)
         st.markdown(f"- ✅ Completed: **{taken_comp}**")
@@ -80,9 +81,9 @@ if course_file and degree_file:
         if not complementary_taken.empty:
             st.dataframe(complementary_taken[["Course Raw", "Course Code"]])
 
-        # --- Technical Electives ---
+        # Technical Electives
         st.subheader("📗 Technical Electives")
-        tech_taken = tech_df[tech_df["Flag"] == 1].copy()
+        tech_taken = tech_df[(tech_df["Flag"] == 1) & (tech_df["Course Code"].notna())].copy()
         tech_taken["Level"] = tech_taken["Course Code"].str.extract(r'(\d{3})')[0].astype(float)
         num_taken = len(tech_taken)
         num_400 = (tech_taken["Level"] >= 400).sum()
