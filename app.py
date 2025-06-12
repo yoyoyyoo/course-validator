@@ -1,84 +1,53 @@
 import streamlit as st
 import pandas as pd
 
-st.title("Course Completion Validator")
+st.title("📘 EE Course Completion Validator")
 
-course_file = st.file_uploader("Upload Course Info Excel", type=["xlsx"])
-degree_file = st.file_uploader("Upload Degree Plan Excel", type=["xlsx"])
+course_file = st.file_uploader("Upload Course Info CSV", type=["csv"])
+degree_file = st.file_uploader("Upload EE_2026 Excel File", type=["xlsx"])
 
 if course_file and degree_file:
-    course_df = pd.read_excel(course_file)
+    course_df = pd.read_csv(course_file)
     degree_df = pd.read_excel(degree_file, sheet_name=None)
+    eleceng_sheet = degree_df["ElecEng"]
 
-    if 'ElecEng' in degree_df:
-        eleceng = degree_df['ElecEng']
+    # === Core (rows 19–62)
+    core_check = eleceng_sheet.iloc[18:62]
+    core_missing = core_check[core_check["Unnamed: 13"] == 0].copy()
+    core_missing["Course Code"] = core_missing.iloc[:, 0]
+    core_missing = core_missing[["Course Code"]]
+    core_df = pd.merge(core_missing, course_df, on="Course Code", how="left")
+    st.subheader("📋 Missing Required Core Courses")
+    st.dataframe(core_df[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions"]])
 
-        try:
-            # Parse and deduplicate headers (row 36 in Excel = iloc[35])
-            raw_headers = eleceng.iloc[35].fillna("").astype(str).tolist()
-            seen = {}
-            def dedup(col):
-                if col not in seen:
-                    seen[col] = 0
-                    return col
-                seen[col] += 1
-                return f"{col}_{seen[col]}"
-            headers = [dedup(col.strip() if col.strip() else f"col_{i}") for i, col in enumerate(raw_headers)]
+    # === Complementary (rows 67–69)
+    comp_check = eleceng_sheet.iloc[66:69]
+    comp_taken = comp_check[comp_check["Unnamed: 13"] == 1].iloc[:, 0].dropna().tolist()
+    comp_needed = max(0, 3 - len(comp_taken))
+    st.subheader("📘 Complementary Studies")
+    st.write(f"- ✅ Completed: {len(comp_taken)}")
+    st.write(f"- ❗ Still need: {comp_needed} more")
+    if comp_taken:
+        st.markdown("**Courses Taken:**")
+        st.write(comp_taken)
 
-            eleceng = eleceng.iloc[36:].reset_index(drop=True)
-            eleceng.columns = headers
-            eleceng.rename(columns={"col_0": "Course"}, inplace=True)
+    # === Technical Electives (rows 78–136)
+    tech_check = eleceng_sheet.iloc[77:136]
+    tech_taken = tech_check[tech_check["Unnamed: 13"] == 1].copy()
+    tech_taken["Course Code"] = tech_taken.iloc[:, 0]
+    course_df.columns = [col.strip().capitalize() for col in course_df.columns]
+    tech_merged = pd.merge(tech_taken, course_df, on="Course Code", how="left")
+    tech_merged = tech_merged[tech_merged["Type"].isin(["tech elective A", "tech elective B"])]
+    tech_merged["Level"] = tech_merged["Course Code"].str.extract(r'(\d{3})').astype(float)
+    tech_count = len(tech_merged)
+    tech_400_count = (tech_merged["Level"] >= 400).sum()
+    missing_400 = max(0, 5 - tech_400_count)
 
-            # Clean non-course rows
-            eleceng = eleceng[eleceng["Course"].notna()]
-            eleceng = eleceng[~eleceng["Course"].str.contains("subtotal|core|flag", case=False, na=False)]
+    st.subheader("📗 Technical Electives")
+    st.write(f"- ✅ Taken: {tech_count}")
+    st.write(f"- ✅ 400-level or above: {tech_400_count}")
+    st.write(f"- ❗ Still need {missing_400} more at 400-level to meet minimum of 5")
+    if tech_count > 0:
+        st.markdown("**Courses Taken:**")
+        st.dataframe(tech_merged[["Course Code", "Name", "Type"]])
 
-            # Extract course code
-            eleceng["Course Code"] = eleceng["Course"].astype(str).str.extract(r'^([A-Z]+\s*\d+)', expand=False)
-
-            # Load course info and normalize
-            course_df.columns = [col.strip().capitalize() for col in course_df.columns]
-            course_df = course_df.rename(columns={"Course": "Course Code"})
-            full = pd.merge(eleceng, course_df, on="Course Code", how="left")
-
-            # ✅ Core courses: only rows 19–70 (Excel), drop None Course Codes
-            core_section = full.iloc[18:70]
-            core_missing = core_section[
-                (core_section["Flag"] != 1) & 
-                (core_section["Course Code"].notna())
-            ]
-
-            # ✅ Tech electives (count only)
-            tech_taken = full[
-                (full["Flag"] == 1) &
-                (full["Type"].isin(["tech elective A", "tech elective B"])) &
-                (full["Course Code"].notna())
-            ].copy()
-            tech_taken["Level"] = tech_taken["Course Code"].str.extract(r'(\d{3})').astype(float)
-
-            total_taken = len(tech_taken)
-            taken_400 = (tech_taken["Level"] >= 400).sum()
-
-            # 🎓 Display missing core courses
-            st.subheader("📋 Missing Required Core Courses (Rows 19–70)")
-            if len(core_missing) > 0:
-                st.dataframe(core_missing[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions", "Type"]])
-            else:
-                st.success("✅ All required core courses completed!")
-
-            # 📊 Elective summary only (no table)
-            st.subheader("🧮 Technical Elective Summary")
-            st.markdown(f"""
-            - ✅ Total technical electives taken: **{total_taken}**
-            - ✅ Number of 400-level electives: **{taken_400}**
-            """)
-
-            if total_taken < 5:
-                st.warning("⚠️ Minimum 5 technical electives required.")
-            if taken_400 < 5:
-                st.warning("⚠️ Minimum 5 must be at 400-level or above.")
-
-        except Exception as e:
-            st.error(f"Error processing file: {e}")
-    else:
-        st.error("Sheet 'ElecEng' not found in the uploaded degree plan.")
