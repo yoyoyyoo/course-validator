@@ -46,16 +46,19 @@ if course_file and degree_file:
                 .str.upper()
             )
 
-            # === 1. Missing Core Courses (Rows 19-62) ===
-            core_rows = eleceng.iloc[18:62]  # Corrected
+            # === 1. Missing Core Courses (Rows 19-63) ===
+            core_rows = eleceng.iloc[18:63].copy()
+            core_rows["Flag"] = pd.to_numeric(core_rows["Flag"], errors="coerce")
             core_missing = core_rows[core_rows["Flag"] == 0].copy()
+
             core_merged = pd.merge(core_missing, course_df, on="Course Code", how="left")
 
             st.subheader("📋 Missing Required Core Courses")
             st.dataframe(core_merged[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions"]])
 
             # === 2. Complementary Studies (Rows 67–69) ===
-            comp_rows = eleceng.iloc[66:69]  # Corrected
+            comp_rows = eleceng.iloc[66:69]  # Rows 67-69
+            comp_rows["Flag"] = pd.to_numeric(comp_rows["Flag"], errors="coerce")
             comp_taken = comp_rows[comp_rows["Flag"] == 1]
             comp_needed = max(0, 3 - len(comp_taken))
 
@@ -67,17 +70,16 @@ if course_file and degree_file:
                 st.write(comp_taken["Course Raw"].tolist())
 
             # === 3. Technical Electives (Rows 78–136) ===
-            tech_rows = eleceng.iloc[77:136]  # Corrected
+            tech_rows = eleceng.iloc[77:136].copy()
+            tech_rows["Flag"] = pd.to_numeric(tech_rows["Flag"], errors="coerce")
             tech_taken = tech_rows[tech_rows["Flag"] == 1].copy()
-            tech_taken["Course Code"] = tech_taken["Course Code"].astype(str)
 
+            tech_taken["Course Code"] = tech_taken["Course Code"].astype(str)
             tech_merged = pd.merge(tech_taken, course_df, on="Course Code", how="left")
+            tech_merged["Level"] = tech_merged["Course Code"].str.extract(r'(\d{3})').astype(float)
+
             if "Type" in tech_merged.columns:
                 tech_merged = tech_merged[tech_merged["Type"].isin(["tech elective A", "tech elective B"])]
-            else:
-                tech_merged = tech_merged.iloc[0:0]  # If Type is missing, avoid crash
-
-            tech_merged["Level"] = tech_merged["Course Code"].str.extract(r'(\d{3})').astype(float)
 
             total_taken = len(tech_merged)
             taken_400 = (tech_merged["Level"] >= 400).sum()
