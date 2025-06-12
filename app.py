@@ -5,103 +5,59 @@ import re
 st.set_page_config(page_title="EE Course Validator", layout="centered")
 st.title("📘 Electrical Engineering Course Validator")
 
-def find_section_index(df, keyword):
-    for i in range(len(df)):
-        val = str(df.iloc[i, 0])
-        if keyword.lower() in val.lower():
-            return i
-    return None
-
-def extract_section(df, start, end, header_offset=1):
-    header_row = df.iloc[start - header_offset]
-    section_df = df.iloc[start:end].copy()
-    section_df.columns = header_row
-    section_df.reset_index(drop=True, inplace=True)
-    section_df.columns = [str(col).strip() if col else f"col_{i}" for i, col in enumerate(section_df.columns)]
-    section_df.rename(columns={section_df.columns[0]: "Course Raw"}, inplace=True)
-    section_df["Flag"] = pd.to_numeric(section_df.get("Flag", section_df.iloc[:, 1]), errors="coerce").fillna(0)
-    section_df["Course Code"] = section_df["Course Raw"].astype(str).str.extract(r'([A-Z]+\s*\d+[A-Z]*)')
-    section_df["Course Code"] = section_df["Course Code"].str.replace(r'\s+', ' ', regex=True).str.upper().str.strip()
-    return section_df
-
-def merge_missing_courses(section_df, course_df, title="Missing Courses"):
-    missing = section_df[(section_df["Flag"] == 0) & (section_df["Course Code"].notna())]
-    merged = pd.merge(
-        missing,
-        course_df[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions"]],
-        on="Course Code",
-        how="left"
-    )
-    if not merged.empty:
-        st.subheader(f"📋 {title}")
-        st.dataframe(merged[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions"]])
-    return merged
-
-# Upload files
+# Upload inputs
 course_file = st.file_uploader("Upload Course Info (test_courses.xlsx)", type=["xlsx"])
-degree_file = st.file_uploader("Upload Student Record (EE_2026.xlsx)", type=["xlsx"])
+degree_file = st.file_uploader("Upload Student Record (EE_202X.xlsx)", type=["xlsx"])
 
 if course_file and degree_file:
     try:
+        # Load course metadata
         course_df = pd.read_excel(course_file)
         course_df.columns = [col.strip() for col in course_df.columns]
-        course_df["Course Code"] = course_df["Course Code"].str.strip().str.upper()
-        course_df["Course Code"] = course_df["Course Code"].str.replace(r'([A-Z]+)(\d{3})', r'\1 \2', regex=True)
+        course_df["Course Code"] = course_df["Course Code"].astype(str).str.strip().str.upper()
 
-        df = pd.read_excel(degree_file, sheet_name="ElecEng", header=None)
+        # Load degree file
+        sheets = pd.read_excel(degree_file, sheet_name=None)
+        if "ElecEng" not in sheets:
+            st.error("❌ Sheet 'ElecEng' not found.")
+            st.stop()
+        eleceng = sheets["ElecEng"]
 
-        # Section markers
-        common_core_start = find_section_index(df, "Common core - 1st year")
-        program_core_start = find_section_index(df, "Program core - 2nd/3rd-year")
-        technical_core_start = find_section_index(df, "Technical core - 4th year")
-        complementary_start = find_section_index(df, "Complementary studies")
-        complementary_end = complementary_start + 3 if complementary_start else None
-        tech_electives_start = find_section_index(df, "Technical Electives")
-        tech_electives_end = find_section_index(df, "Capstone Design Project") or len(df)
+        # Helper: Find row index by keyword
+        def find_row(df, keyword):
+            for i, v in enumerate(df.iloc[:, 0].astype(str)):
+                if keyword.lower() in v.lower():
+                    return i
+            return None
 
-        # Extract sections
-        core1_df = extract_section(df, common_core_start + 1, program_core_start)
-        core2_df = extract_section(df, program_core_start + 2, technical_core_start)
-        complementary_df = extract_section(df, complementary_start + 1, complementary_end, header_offset=1)
-        tech_df = extract_section(df, tech_electives_start + 1, tech_electives_end, header_offset=1)
+        # Detect section positions
+        comp_start = find_row(eleceng, "Complementary studies electives")
+        comp_end = find_row(eleceng, "Subtotal complementary studies")
 
-        # Missing core courses
-        merge_missing_courses(core1_df, course_df, "Missing Common Core Courses")
-        merge_missing_courses(core2_df, course_df, "Missing ELEC Core Courses")
+        # 🧾 Complementary Studies
+        if comp_start is not None and comp_end is not None:
+            comp_section = eleceng.iloc[comp_start + 1:comp_end].copy()
+            comp_section.columns = eleceng.iloc[comp_start + 1].index  # Ensure clean headers
+            comp_section = comp_section.rename(columns={comp_section.columns[0]: "Course", comp_section.columns[1]: "Flag"})
 
-        # Complementary Studies (FIXED)
-        st.subheader("📘 Complementary Studies")
-        complementary_taken = complementary_df[
-            (complementary_df["Flag"] == 1) & (complementary_df["Course Code"].notna())
-        ]
-        taken_comp = len(complementary_taken)
-        missing_comp = max(0, 3 - taken_comp)
-        st.markdown(f"- ✅ Completed: **{taken_comp}**")
-        st.markdown(f"- ❗ Still Required: **{missing_comp}**")
-        if not complementary_taken.empty:
-            st.dataframe(complementary_taken[["Course Raw", "Course Code"]])
+            # Normalize and filter
+            comp_section["Flag"] = pd.to_numeric(comp_section["Flag"], errors="coerce").fillna(0).astype(int)
+            comp_completed = comp_section[(comp_section["Flag"] == 1) & (comp_section["Course"].notna())]
 
-        # Technical Electives
-        st.subheader("📗 Technical Electives")
-        tech_taken = tech_df[(tech_df["Flag"] == 1) & (tech_df["Course Code"].notna())].copy()
-        tech_taken["Level"] = tech_taken["Course Code"].str.extract(r'(\d{3})')[0].astype(float)
-        num_taken = len(tech_taken)
-        num_400 = (tech_taken["Level"] >= 400).sum()
-        missing_400 = max(0, 5 - num_400)
+            count_comp = len(comp_completed)
+            remaining = max(0, 3 - count_comp)
 
-        st.markdown(f"- ✅ Taken: **{num_taken}**")
-        st.markdown(f"- ✅ 400-level or higher: **{num_400}**")
-        st.markdown(f"- ❗ Still need **{missing_400} more 400-level** courses to meet the minimum")
+            st.subheader("🧾 Complementary Studies")
+            st.markdown(f"✅ Completed: **{count_comp}**")
+            st.markdown(f"❗ Still Required: **{remaining}**")
 
-        tech_taken_named = pd.merge(
-            tech_taken,
-            course_df[["Course Code", "Name"]],
-            on="Course Code",
-            how="left"
-        )
+            if not comp_completed.empty:
+                st.markdown("**Courses Taken:**")
+                for course in comp_completed["Course"]:
+                    st.markdown(f"- {course}")
 
-        if not tech_taken_named.empty:
-            st.dataframe(tech_taken_named[["Course Code", "Name", "Level"]])
+        else:
+            st.warning("⚠️ Complementary studies section not detected properly.")
 
     except Exception as e:
         st.error(f"❌ Error: {e}")
