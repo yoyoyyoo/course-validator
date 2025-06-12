@@ -1,111 +1,121 @@
 import streamlit as st
 import pandas as pd
+import re
 
 st.set_page_config(page_title="EE Course Validator", layout="centered")
 st.title("📘 Electrical Engineering Course Validator")
 
-# Upload input files
+def extract_course_code(cell_value):
+    """Extract course code from formula or plain text"""
+    if pd.isna(cell_value):
+        return None
+    
+    # Handle Excel formula case (='Course Units'!A8)
+    if isinstance(cell_value, str) and cell_value.startswith("='"):
+        match = re.search(r"'!A\d+", cell_value)
+        if match:
+            # Get the row number and look up in Course Units sheet
+            row_num = int(match.group(0)[3:])
+            if 'Course Units' in degree_sheets:
+                return degree_sheets['Course Units'].iloc[row_num-1, 0]
+    
+    # Handle plain text case (ELEC 221)
+    match = re.match(r'([A-Z]+\s*\d+[A-Z]*)', str(cell_value).strip())
+    return match.group(0) if match else None
+
+# Upload inputs
 course_file = st.file_uploader("Upload Course Info (test_courses.xlsx)", type=["xlsx"])
 degree_file = st.file_uploader("Upload Student Record (EE_2026.xlsx)", type=["xlsx"])
 
 if course_file and degree_file:
     try:
-        # Load course info
-        course_df = pd.read_excel(course_file)
-
-        # Normalize headers
+        # Load course metadata
+        course_df = pd.read_excel(course_file, sheet_name="Sheet1")
+        
+        # Clean course data
         course_df.columns = [col.strip() for col in course_df.columns]
-        # Rename "Course" to "Course Code" if needed
-        if "Course" in course_df.columns:
-            course_df.rename(columns={"Course": "Course Code"}, inplace=True)
-
-        # Confirm Course Code column exists
-        if "Course Code" not in course_df.columns:
-            st.error("❌ 'Course Code' column not found in uploaded course info.")
+        course_df["Course Code"] = course_df["Course Code"].str.strip().str.upper()
+        
+        # Load EE degree file
+        degree_sheets = pd.read_excel(degree_file, sheet_name=None)
+        
+        if "ElecEng" not in degree_sheets:
+            st.error("❌ 'ElecEng' sheet not found.")
             st.stop()
-
-        # Clean Course Code values
-        course_df["Course Code"] = course_df["Course Code"].astype(str).str.replace(r"\s+", " ", regex=True).str.strip().str.upper()
-
-        # Load degree plan
-        sheets = pd.read_excel(degree_file, sheet_name=None)
-        if "ElecEng" not in sheets:
-            st.error("❌ 'ElecEng' sheet not found in uploaded student file.")
-            st.stop()
-
-        eleceng = sheets["ElecEng"]
-
-        # 🟦 Core Courses: Rows 19–63
+            
+        eleceng = degree_sheets["ElecEng"]
+        
+        # Process Core Courses (Rows 19-63)
         core = eleceng.iloc[18:63].copy()
-        core["Course Raw"] = core.iloc[:, 0].astype(str)
-        core["Flag"] = pd.to_numeric(core["Flag"], errors="coerce")
-        core["Course Code"] = (
-            core["Course Raw"]
-            .str.extract(r'^([A-Z]+\s*\d+)', expand=False)
-            .str.replace(r"\s+", " ", regex=True)
-            .str.strip()
-            .str.upper()
-        )
-
+        core["Course Code"] = core.iloc[:, 0].apply(extract_course_code)
+        core["Flag"] = pd.to_numeric(core.iloc[:, 1], errors="coerce").fillna(0)
+        
         core_missing = core[core["Flag"] == 0]
-        core_result = pd.merge(core_missing, course_df, on="Course Code", how="left")
+        core_merged = pd.merge(
+            core_missing, 
+            course_df, 
+            on="Course Code", 
+            how="left"
+        ).dropna(subset=["Course Code"])
 
         st.subheader("📋 Missing Required Core Courses")
-        if not core_result.empty:
-            st.dataframe(core_result[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions"]])
+        if not core_merged.empty:
+            st.dataframe(core_merged[["Course Code", "Name", "Credits", "Type"]])
         else:
             st.success("✅ All core courses are completed.")
 
-        # 🟦 Complementary Studies: Rows 67–69
+        # Process Complementary Studies (Rows 67-69)
         comp = eleceng.iloc[66:69].copy()
-        comp["Flag"] = pd.to_numeric(comp["Flag"], errors="coerce")
+        comp["Flag"] = pd.to_numeric(comp.iloc[:, 1], errors="coerce").fillna(0)
         comp_taken = comp[comp["Flag"] == 1]
-
+        
         st.subheader("🧾 Complementary Studies")
         st.markdown(f"- ✅ Completed: **{len(comp_taken)}**")
         st.markdown(f"- ❗ Still need: **{max(0, 3 - len(comp_taken))} more**")
-
+        
         if not comp_taken.empty:
-            names = comp_taken.iloc[:, 0].astype(str).str[10:].tolist()
             st.markdown("**Courses Taken:**")
-            for name in names:
-                st.markdown(f"• {name}")
+            for _, row in comp_taken.iterrows():
+                course_name = str(row.iloc[0]).split(")")[-1].strip()
+                if course_name:
+                    st.markdown(f"• {course_name}")
 
-        # 🟦 Technical Electives: Rows 78–136
+        # Process Technical Electives (Rows 78-136)
         tech = eleceng.iloc[77:136].copy()
-        tech["Course Raw"] = tech.iloc[:, 0].astype(str)
-        tech["Flag"] = pd.to_numeric(tech["Flag"], errors="coerce")
-        tech["Course Code"] = (
-            tech["Course Raw"]
-            .str.extract(r'^([A-Z]+\s*\d+)', expand=False)
-            .str.replace(r"\s+", " ", regex=True)
-            .str.strip()
-            .str.upper()
-        )
-
-        tech_taken = tech[tech["Flag"] == 1]
+        tech["Course Code"] = tech.iloc[:, 0].apply(extract_course_code)
+        tech["Flag"] = pd.to_numeric(tech.iloc[:, 1], errors="coerce").fillna(0)
+        
+        tech_taken = tech[tech["Flag"] == 1].dropna(subset=["Course Code"])
         tech_merged = pd.merge(
             tech_taken,
-            course_df[["Course Code", "Name", "Type"]],
+            course_df[["Course Code", "Name", "Type", "Credits"]],
             on="Course Code",
             how="left"
         )
-
-        # Filter only tech elective A or B
-        tech_filtered = tech_merged[tech_merged["Type"].isin(["tech elective A", "tech elective B"])]
-        tech_filtered["Level"] = tech_filtered["Course Code"].str.extract(r'(\d{3})').astype(float)
-
-        taken_total = len(tech_filtered)
-        taken_400 = (tech_filtered["Level"] >= 400).sum()
-        missing_400 = max(0, 5 - taken_400)
+        
+        # Filter only technical electives
+        tech_merged = tech_merged[
+            tech_merged["Type"].str.contains("tech elective", case=False, na=False)
+        ]
+        
+        # Extract course level
+        tech_merged["Level"] = tech_merged["Course Code"].str.extract(r'(\d{3})')[0].astype(float)
+        
+        count_taken = len(tech_merged)
+        count_400 = (tech_merged["Level"] >= 400).sum()
+        missing_400 = max(0, 5 - count_400)
 
         st.subheader("📗 Technical Electives")
-        st.markdown(f"- ✅ Taken: **{taken_total}**")
-        st.markdown(f"- ✅ 400-level or above: **{taken_400}**")
+        st.markdown(f"- ✅ Taken: **{count_taken}**")
+        st.markdown(f"- ✅ 400-level or above: **{count_400}**")
         st.markdown(f"- ❗ Still need: **{missing_400} more at 400-level** to meet the 5 required")
 
-        if not tech_filtered.empty:
-            st.dataframe(tech_filtered[["Course Code", "Name", "Type"]])
+        if not tech_merged.empty:
+            st.dataframe(tech_merged[["Course Code", "Name", "Type", "Credits"]])
 
     except Exception as e:
-        st.error(f"❌ Error processing files: {e}")
+        st.error(f"❌ Error processing files: {str(e)}")
+        st.error("Please ensure:")
+        st.error("1. Files are in the correct format")
+        st.error("2. Course codes match between files")
+        st.error("3. No empty or malformed cells in critical columns")
