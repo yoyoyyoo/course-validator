@@ -80,38 +80,45 @@ if course_file and degree_file:
                 if course_name:
                     st.markdown(f"• {course_name}")
 
-        # Process Technical Electives (Rows 78-136)
-        tech = eleceng.iloc[77:136].copy()
-        tech["Course Code"] = tech.iloc[:, 0].apply(extract_course_code)
-        tech["Flag"] = pd.to_numeric(tech.iloc[:, 1], errors="coerce").fillna(0)
-        
-        tech_taken = tech[tech["Flag"] == 1].dropna(subset=["Course Code"])
-        tech_merged = pd.merge(
-            tech_taken,
-            course_df[["Course Code", "Name", "Type", "Credits"]],
-            on="Course Code",
-            how="left"
-        )
-        
-        # Filter only technical electives
-        tech_merged = tech_merged[
-            tech_merged["Type"].str.contains("tech elective", case=False, na=False)
-        ]
-        
-        # Extract course level
-        tech_merged["Level"] = tech_merged["Course Code"].str.extract(r'(\d{3})')[0].astype(float)
-        
-        count_taken = len(tech_merged)
-        count_400 = (tech_merged["Level"] >= 400).sum()
-        missing_400 = max(0, 5 - count_400)
+# Process Technical Electives (Rows 78-136)
+tech = eleceng.iloc[77:136].copy()
+tech["Course Code"] = tech.iloc[:, 0].apply(extract_course_code)
+tech["Flag"] = pd.to_numeric(tech.iloc[:, 1], errors="coerce").fillna(0)
 
-        st.subheader("📗 Technical Electives")
-        st.markdown(f"- ✅ Taken: **{count_taken}**")
-        st.markdown(f"- ✅ 400-level or above: **{count_400}**")
-        st.markdown(f"- ❗ Still need: **{missing_400} more at 400-level** to meet the 5 required")
+# Get all flagged courses (Flag = 1)
+tech_taken = tech[tech["Flag"] == 1].dropna(subset=["Course Code"])
 
-        if not tech_merged.empty:
-            st.dataframe(tech_merged[["Course Code", "Name", "Type", "Credits"]])
+# Merge with course info to get type and credits
+tech_merged = pd.merge(
+    tech_taken,
+    course_df[["Course Code", "Name", "Type", "Credits"]],
+    on="Course Code",
+    how="left"
+)
+
+# Count all flagged courses first (before filtering by type)
+count_taken = len(tech_taken)
+
+# Now filter only technical electives for display
+tech_merged = tech_merged[
+    tech_merged["Type"].str.contains("tech elective", case=False, na=False)
+]
+
+# Extract course level for 400-level count
+tech_merged["Level"] = tech_merged["Course Code"].str.extract(r'(\d{3})')[0].astype(float)
+count_400 = (tech_merged["Level"] >= 400).sum()
+missing_400 = max(0, 5 - count_400)
+
+st.subheader("📗 Technical Electives")
+st.markdown(f"- ✅ Total flagged courses: **{count_taken}**")
+st.markdown(f"- ✅ Technical electives taken: **{len(tech_merged)}**")
+st.markdown(f"- ✅ 400-level or above: **{count_400}**")
+st.markdown(f"- ❗ Still need: **{missing_400} more at 400-level** to meet the 5 required")
+
+if not tech_merged.empty:
+    st.dataframe(tech_merged[["Course Code", "Name", "Type", "Credits"]])
+else:
+    st.warning("No technical electives found in the selected courses")
 
     except Exception as e:
         st.error(f"❌ Error processing files: {str(e)}")
