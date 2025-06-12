@@ -3,11 +3,11 @@ import pandas as pd
 
 st.title("📘 EE Course Completion Validator")
 
-course_file = st.file_uploader("Upload Course Info Excel File", type=["xlsx"])
+course_file = st.file_uploader("Upload Course Info Excel (.xlsx)", type=["xlsx"])
 degree_file = st.file_uploader("Upload EE_2026 Excel File", type=["xlsx"])
 
 if course_file and degree_file:
-    course_df = pd.read_csv(course_file)
+    course_df = pd.read_excel(course_file)
     degree_df = pd.read_excel(degree_file, sheet_name=None)
     eleceng_sheet = degree_df["ElecEng"]
 
@@ -16,6 +16,7 @@ if course_file and degree_file:
     core_missing = core_check[core_check["Unnamed: 13"] == 0].copy()
     core_missing["Course Code"] = core_missing.iloc[:, 0]
     core_missing = core_missing[["Course Code"]]
+    course_df.columns = [col.strip().capitalize() for col in course_df.columns]
     core_df = pd.merge(core_missing, course_df, on="Course Code", how="left")
     st.subheader("📋 Missing Required Core Courses")
     st.dataframe(core_df[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions"]])
@@ -35,7 +36,6 @@ if course_file and degree_file:
     tech_check = eleceng_sheet.iloc[77:136]
     tech_taken = tech_check[tech_check["Unnamed: 13"] == 1].copy()
     tech_taken["Course Code"] = tech_taken.iloc[:, 0]
-    course_df.columns = [col.strip().capitalize() for col in course_df.columns]
     tech_merged = pd.merge(tech_taken, course_df, on="Course Code", how="left")
     tech_merged = tech_merged[tech_merged["Type"].isin(["tech elective A", "tech elective B"])]
     tech_merged["Level"] = tech_merged["Course Code"].str.extract(r'(\d{3})').astype(float)
@@ -50,4 +50,3 @@ if course_file and degree_file:
     if tech_count > 0:
         st.markdown("**Courses Taken:**")
         st.dataframe(tech_merged[["Course Code", "Name", "Type"]])
-
