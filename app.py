@@ -60,7 +60,7 @@ if course_file and degree_file:
 
         st.subheader("📋 Missing Required Core Courses")
         if not core_merged.empty:
-            st.dataframe(core_merged[["Course Code", "Name", "Credits", "Type"]])
+            st.dataframe(core_merged[["Course Code", "Name", "Type","Prerequisite", "Corequisite", "Exclusions"]])
         else:
             st.success("✅ All core courses are completed.")
 
