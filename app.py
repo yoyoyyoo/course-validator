@@ -3,7 +3,7 @@ import pandas as pd
 
 st.title("📘 EE Course Completion Validator")
 
-course_file = st.file_uploader("Upload Course Info CSV", type=["csv"])
+course_file = st.file_uploader("Upload Course Info Excel File", type=["xlsx"])
 degree_file = st.file_uploader("Upload EE_2026 Excel File", type=["xlsx"])
 
 if course_file and degree_file:
