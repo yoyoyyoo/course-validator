@@ -81,7 +81,7 @@ if course_file and degree_file:
                     st.markdown(f"• {course_name}")
 
         # Process Technical Electives (Rows 78-135)
-        tech = eleceng.iloc[77:136].copy()  # Rows 78-136 in Excel (0-based 77-135)
+        tech = eleceng.iloc[76:136].copy()  # Rows 78-136 in Excel (0-based 77-135)
         tech["Course Code"] = tech.iloc[:, 0].apply(extract_course_code)
         tech["Flag"] = pd.to_numeric(tech.iloc[:, 1], errors="coerce").fillna(0)
         
