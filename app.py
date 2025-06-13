@@ -15,7 +15,7 @@ if course_file and student_file:
         student_sheets = pd.read_excel(student_file, sheet_name=None)
 
         # ✅ ElecEng or CompEng sheet
-        possible_sheets = ["elecEng", "compEng"]
+        possible_sheets = ["eleceng", "compeng"]
         sheet_name = next((name for name in student_sheets.keys() if name.strip().lower() in possible_sheets), None)
 
         if not sheet_name:
