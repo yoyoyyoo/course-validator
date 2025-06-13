@@ -42,8 +42,9 @@ def process_technical_electives(student_df):
         # Filter taken courses (Flag = 1)
         tech_taken = tech_df[tech_df["Flag"] == 1].copy()
         
-        # Extract course codes and levels
+        # Extract course codes and names
         tech_taken["Course Code"] = tech_taken["Course"].str.extract(r"([A-Z]{4}\s?\d{3})")[0].str.strip()
+        tech_taken["Course Name"] = tech_taken["Course"].str.replace(r"[A-Z]{4}\s?\d{3}\s*", "", regex=True).str.strip()
         tech_taken = tech_taken.dropna(subset=["Course Code"])
         tech_taken["Level"] = tech_taken["Course Code"].str.extract(r"(\d{3})").astype(float)
         
@@ -55,7 +56,6 @@ def process_technical_electives(student_df):
             if 'tech_df' in locals():
                 st.write("Technical electives data sample:", tech_df.head())
             st.write("Student DF columns:", student_df.columns.tolist())
-            st.write("Student DF shape:", student_df.shape)
         return None
 
 def main():
@@ -93,27 +93,99 @@ def main():
             return
             
         student_df = student_sheets[sheet_name]
-        
-        # Process technical electives
+        section_titles = student_df.iloc[:, 0].astype(str)
+
+        # SECTION 1: CORE COURSES
+        with st.spinner("Analyzing core courses..."):
+            # Locate core sections
+            core_start = find_section(section_titles, ["Common core"])
+            core_end = find_section(section_titles, ["Program core", "Technical core"])
+            progcore_end = find_section(section_titles, ["Subtotal program core"])
+            
+            if None in [core_start, core_end, progcore_end]:
+                st.error("❌ Could not locate all core course sections")
+            else:
+                # Process core courses
+                core = student_df.iloc[core_end+1:progcore_end].copy()
+                core.columns = student_df.iloc[core_start+1]
+                core = core[core["Flag"] == 0]  # Flag=0 means incomplete
+                core["Course Code"] = core.iloc[:, 0].astype(str).str.extract(r"([A-Z]{4}\s?\d{3})")[0].str.strip()
+                core = core.dropna(subset=["Course Code"])
+                core = pd.merge(core, course_df, on="Course Code", how="inner")
+                
+                st.subheader("📋 Incomplete Core Courses")
+                if core.empty:
+                    st.success("✅ All core courses completed")
+                else:
+                    st.dataframe(core[["Course Code", "Name", "Term"]]
+                                 .style.highlight_null("red")
+                                 .set_properties(**{'text-align': 'left'}))
+
+        # SECTION 2: COMPLEMENTARY STUDIES
+        with st.spinner("Checking complementary studies..."):
+            comp_start = find_section(section_titles, ["Complementary studies"])
+            comp_end = find_section(section_titles, ["Subtotal complementary"])
+            
+            if None in [comp_start, comp_end]:
+                st.error("❌ Could not locate complementary studies section")
+            else:
+                comp = student_df.iloc[comp_start+2:comp_end, [0, 1]].copy()
+                comp.columns = ["Course", "Flag"]
+                comp["Flag"] = pd.to_numeric(comp["Flag"], errors="coerce").fillna(0).astype(int)
+                comp_taken = comp[comp["Flag"] == 1]
+                
+                st.subheader("🧾 Complementary Studies")
+                cols = st.columns(2)
+                cols[0].metric("Completed", len(comp_taken))
+                cols[1].metric("Still Required", max(0, 3 - len(comp_taken)))
+                
+                if not comp_taken.empty:
+                    with st.expander("View taken courses"):
+                        st.dataframe(comp_taken.reset_index(drop=True))
+
+        # SECTION 3: TECHNICAL ELECTIVES
         with st.spinner("Analyzing technical electives..."):
             tech_taken = process_technical_electives(student_df)
             
             if tech_taken is not None:
                 total_taken = len(tech_taken)
                 taken_400 = (tech_taken["Level"] >= 400).sum()
-                remaining = max(0, 5 - total_taken)
+                taken_under_400 = total_taken - taken_400
+                
+                # Calculate remaining requirements
+                remaining_total = max(0, 5 - total_taken)
+                remaining_400 = max(0, 5 - taken_400)
+                
+                # Adjust for cases where student took under-400 courses
+                effective_remaining_400 = max(remaining_400, remaining_total)
                 
                 st.subheader("🛠 Technical Electives Summary")
+                
+                # Display requirements
                 cols = st.columns(3)
-                cols[0].metric("Total Taken", total_taken)
-                cols[1].metric("400+ Level", taken_400)
-                cols[2].metric("Remaining", remaining)
+                cols[0].metric("Total Taken", f"{total_taken}/5")
+                cols[1].metric("400+ Level Taken", f"{taken_400}/5")
+                cols[2].metric("Under 400 Taken", taken_under_400)
+                
+                # Display remaining requirements
+                st.markdown("**Remaining Requirements:**")
+                req_cols = st.columns(2)
+                req_cols[0].metric("Total Electives Needed", remaining_total)
+                req_cols[1].metric("400+ Level Needed", effective_remaining_400)
                 
                 if not tech_taken.empty:
                     with st.expander("View taken electives"):
-                        st.dataframe(tech_taken[["Course Code", "Level", "Credit"]].reset_index(drop=True))
+                        st.dataframe(tech_taken[["Course Code", "Course Name", "Level"]]
+                                   .sort_values("Level", ascending=False)
+                                   .reset_index(drop=True))
                 else:
                     st.warning("No technical electives marked as completed (Flag = 1)")
+                
+                # Additional guidance
+                if taken_under_400 > 0:
+                    st.warning(f"Note: You've taken {taken_under_400} under-400 level courses. "
+                             f"You need at least {effective_remaining_400} more 400+ level courses "
+                             "to meet the requirements.")
 
     except Exception as e:
         st.error(f"❌ Error: {str(e)}")
