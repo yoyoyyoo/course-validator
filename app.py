@@ -13,33 +13,57 @@ def find_section(section_titles, possible_names):
             return matches.idxmax()
     return None
 
-def process_technical_electives(student_df):
-    """Process technical electives from CE format"""
+def process_technical_electives(student_df, program_type):
+    """Process technical electives for both CE and EE programs"""
     try:
-        # Find all course rows in the technical electives sections
         section_titles = student_df.iloc[:, 0].astype(str)
-        tech_electives_pattern = r"(Courses Offered by ECE|Courses Offered by Other Departments)"
-        tech_sections = section_titles[section_titles.str.contains(tech_electives_pattern, case=False)].index
         
-        if len(tech_sections) < 2:
-            st.warning("⚠️ Could not find both technical elective sections")
-            return None
+        # Different patterns for CE vs EE
+        if program_type.lower() in ['ce', 'compeng', 'computer']:
+            tech_electives_pattern = r"(Courses Offered by ECE|Courses Offered by Other Departments)"
+            section_headers = section_titles[section_titles.str.contains(tech_electives_pattern, case=False)].index
             
-        # Process ECE courses
-        ece_courses = student_df.iloc[tech_sections[0]+1:tech_sections[1]-1, :3]  # Take first 3 columns
-        ece_courses.columns = ["Course", "Flag", "Credit"]
-        
-        # Process Other Departments courses
-        other_courses = student_df.iloc[tech_sections[1]+1:, :3]  # Take first 3 columns
-        other_courses.columns = ["Course", "Flag", "Credit"]
-        
-        # Combine both sections
-        tech_df = pd.concat([ece_courses, other_courses])
-        
-        # Convert Flag to numeric (1 = taken, 0 = not taken)
+            if len(section_headers) < 2:
+                st.warning("⚠️ Could not find both technical elective sections for CE")
+                return None
+                
+            # Process ECE courses
+            ece_courses = student_df.iloc[section_headers[0]+1:section_headers[1]-1, :3]
+            ece_courses.columns = ["Course", "Flag", "Credit"]
+            
+            # Process Other Departments courses
+            other_courses = student_df.iloc[section_headers[1]+1:, :3]
+            other_courses.columns = ["Course", "Flag", "Credit"]
+            
+            # Combine both sections
+            tech_df = pd.concat([ece_courses, other_courses])
+            
+        elif program_type.lower() in ['ee', 'eleceng', 'electrical']:
+            # EE-specific pattern
+            tech_section = find_section(section_titles, ["technical electives", "electives"])
+            if tech_section is None:
+                st.warning("⚠️ Could not find technical electives section for EE")
+                return None
+                
+            # Find the end of the section (look for next section or subtotal)
+            next_sections = section_titles.str.contains(r"(subtotal|total)", case=False)
+            next_section_idx = next_sections[next_sections].index
+            next_section_idx = next_section_idx[next_section_idx > tech_section]
+            
+            if len(next_section_idx) == 0:
+                end_idx = len(student_df)
+            else:
+                end_idx = next_section_idx[0]
+                
+            tech_df = student_df.iloc[tech_section+1:end_idx, :3]
+            tech_df.columns = ["Course", "Flag", "Credit"]
+            
+        else:
+            st.error(f"Unknown program type: {program_type}")
+            return None
+
+        # Common processing for both programs
         tech_df["Flag"] = pd.to_numeric(tech_df["Flag"], errors="coerce").fillna(0).astype(int)
-        
-        # Filter taken courses (Flag = 1)
         tech_taken = tech_df[tech_df["Flag"] == 1].copy()
         
         # Extract course codes and names
@@ -80,11 +104,19 @@ def main():
             course_df.columns = [col.strip() for col in course_df.columns]
             course_df["Course Code"] = course_df["Course Code"].str.strip().str.upper()
         
-        # Sheet detection
-        possible_sheets = ["eleceng", "compeng", "ee", "ce", "electrical", "computer"]
+        # Sheet detection and program type determination
+        sheet_mapping = {
+            'eleceng': 'EE',
+            'ee': 'EE',
+            'electrical': 'EE',
+            'compeng': 'CE',
+            'ce': 'CE',
+            'computer': 'CE'
+        }
+        
         sheet_name = next(
             (name for name in student_sheets.keys() 
-             if name.strip().lower() in possible_sheets),
+             if name.strip().lower() in sheet_mapping.keys()),
             None
         )
         
@@ -92,6 +124,7 @@ def main():
             st.error(f"❌ Couldn't find expected sheet. Available sheets: {list(student_sheets.keys())}")
             return
             
+        program_type = sheet_mapping[sheet_name.strip().lower()]
         student_df = student_sheets[sheet_name]
         section_titles = student_df.iloc[:, 0].astype(str)
 
@@ -145,17 +178,23 @@ def main():
 
         # SECTION 3: TECHNICAL ELECTIVES
         with st.spinner("Analyzing technical electives..."):
-            tech_taken = process_technical_electives(student_df)
+            tech_taken = process_technical_electives(student_df, program_type)
             
             if tech_taken is not None:
+                # Different requirements for CE vs EE
+                if program_type == 'CE':
+                    required_400 = 5
+                else:  # EE
+                    required_400 = 5  # Adjust this number based on actual EE requirements
+                
                 total_taken = len(tech_taken)
                 taken_400 = (tech_taken["Level"] >= 400).sum()
                 taken_under_400 = total_taken - taken_400
                 
                 # Calculate remaining 400+ level requirements
-                remaining_400 = max(0, 5 - taken_400)
+                remaining_400 = max(0, required_400 - taken_400)
                 
-                st.subheader("🛠 Technical Electives")
+                st.subheader(f"🛠 Technical Electives ({program_type} Requirements)")
                 
                 # Display metrics
                 cols = st.columns(3)
