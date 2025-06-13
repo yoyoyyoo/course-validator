@@ -16,10 +16,10 @@ if course_file and student_file:
 
         # ✅ ElecEng or CompEng sheet
         possible_sheets = ["ElecEng", "CompEng"]
-        sheet_name = next((s for s in possible_sheets if s in student_sheets), None)
+        sheet_name = next((name for name in student_sheets.keys() if name.strip().lower() in possible_sheets), None)
 
         if not sheet_name:
-            st.error("❌ Could not find a valid sheet. Expecting 'ElecEng' or 'CompEng'.")
+            st.error(f"❌ Expected sheets: {possible_sheets}. Found: {list(student_sheets.keys())}")
             st.stop()
 
         student_df = student_sheets[sheet_name]
