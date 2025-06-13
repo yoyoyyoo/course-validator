@@ -16,8 +16,10 @@ if course_file and degree_file:
         course_df.columns = [col.strip() for col in course_df.columns]
         course_df.rename(columns=lambda x: x.strip().title(), inplace=True)
 
+        # ✅ Ensure Course Code exists
         if "Course Code" not in course_df.columns:
             st.error("❌ 'Course Code' column not found in uploaded test_courses.xlsx")
+            st.write("Found columns:", list(course_df.columns))
             st.stop()
 
         course_df["Course Code"] = course_df["Course Code"].str.strip().str.upper()
@@ -30,7 +32,7 @@ if course_file and degree_file:
             st.error("❌ 'ElecEng' sheet not found.")
             st.stop()
 
-        # Find section indices
+        # Identify section markers
         section_indices = {}
         for i, val in enumerate(eleceng.iloc[:, 0]):
             if isinstance(val, str):
@@ -48,9 +50,9 @@ if course_file and degree_file:
                 elif "list b" in key:
                     section_indices["tech_end"] = i
 
-        # 🧮 CORE COURSES
+        # 📋 Incomplete Core Courses
         if "core_start" in section_indices and "core_end" in section_indices:
-            core = eleceng.iloc[section_indices["core_start"] + 1:section_indices["core_end"], [0, 1]].copy()
+            core = eleceng.iloc[section_indices["core_start"] + 1 : section_indices["core_end"], [0, 1]].copy()
             core.columns = ["Course", "Flag"]
             core["Course Code"] = core["Course"].str.extract(r'([A-Z]+\s*\d{3})')
             core["Flag"] = pd.to_numeric(core["Flag"], errors="coerce").fillna(0).astype(int)
@@ -64,9 +66,9 @@ if course_file and degree_file:
             else:
                 st.success("✅ All core courses completed.")
 
-        # 🧾 COMPLEMENTARY STUDIES
+        # 🧾 Complementary Studies
         if "comp_start" in section_indices and "comp_end" in section_indices:
-            comp = eleceng.iloc[section_indices["comp_start"] + 2:section_indices["comp_end"], [0, 1]].copy()
+            comp = eleceng.iloc[section_indices["comp_start"] + 2 : section_indices["comp_end"], [0, 1]].copy()
             comp.columns = ["Course", "Flag"]
             comp["Flag"] = pd.to_numeric(comp["Flag"], errors="coerce").fillna(0).astype(int)
             comp_taken = comp[comp["Flag"] == 1]
@@ -80,9 +82,9 @@ if course_file and degree_file:
                 for course in comp_taken["Course"]:
                     st.markdown(f"- {course}")
 
-        # ⚙️ TECHNICAL ELECTIVES
+        # 🛠️ Technical Electives
         if "tech_start" in section_indices and "tech_end" in section_indices:
-            tech = eleceng.iloc[section_indices["tech_start"] + 1:section_indices["tech_end"], [0, 1]].copy()
+            tech = eleceng.iloc[section_indices["tech_start"] + 1 : section_indices["tech_end"], [0, 1]].copy()
             tech.columns = ["Course", "Flag"]
             tech["Flag"] = pd.to_numeric(tech["Flag"], errors="coerce").fillna(0).astype(int)
             tech["Course Code"] = tech["Course"].str.extract(r'([A-Z]+\s*\d{3})')
