@@ -60,8 +60,8 @@ def main():
             'progcore_end': find_section(section_titles, ["Subtotal program core"]),
             'comp_start': find_section(section_titles, ["Complementary studies"]),
             'comp_end': find_section(section_titles, ["Subtotal complementary"]),
-            'tech_start': find_section(section_titles, ["List A:", "Technical Electives"]),
-            'tech_end': find_section(section_titles, ["List B:", "Technical Electives"])
+            'tech_start': find_section(section_titles, ["List A:", "Technical Electives", "Courses Offered by ECE"]),
+            'tech_end': find_section(section_titles, ["List B:", "Technical Electives", "Courses Offered by Other Departments"])
         }
 
         # Validate sections
