@@ -25,14 +25,16 @@ def process_technical_electives(student_df):
             st.warning("⚠️ Could not find both technical elective sections")
             return None
             
-        # Combine both ECE and Other Departments sections
-        tech_df = pd.concat([
-            student_df.iloc[tech_sections[0]+1:tech_sections[1]-1],
-            student_df.iloc[tech_sections[1]+1:]
-        ])
+        # Process ECE courses
+        ece_courses = student_df.iloc[tech_sections[0]+1:tech_sections[1]-1, :3]  # Take first 3 columns
+        ece_courses.columns = ["Course", "Flag", "Credit"]
         
-        # Manually set columns based on your screenshot structure
-        tech_df.columns = ["Course", "Flag", "Credit"]
+        # Process Other Departments courses
+        other_courses = student_df.iloc[tech_sections[1]+1:, :3]  # Take first 3 columns
+        other_courses.columns = ["Course", "Flag", "Credit"]
+        
+        # Combine both sections
+        tech_df = pd.concat([ece_courses, other_courses])
         
         # Convert Flag to numeric (1 = taken, 0 = not taken)
         tech_df["Flag"] = pd.to_numeric(tech_df["Flag"], errors="coerce").fillna(0).astype(int)
@@ -50,7 +52,10 @@ def process_technical_electives(student_df):
     except Exception as e:
         st.error(f"Error processing technical electives: {str(e)}")
         with st.expander("Debug Info"):
-            st.write("Technical electives data sample:", tech_df.head() if 'tech_df' in locals() else "Not available")
+            if 'tech_df' in locals():
+                st.write("Technical electives data sample:", tech_df.head())
+            st.write("Student DF columns:", student_df.columns.tolist())
+            st.write("Student DF shape:", student_df.shape)
         return None
 
 def main():
@@ -106,7 +111,7 @@ def main():
                 
                 if not tech_taken.empty:
                     with st.expander("View taken electives"):
-                        st.dataframe(tech_taken[["Course Code", "Level", "Credit"]])
+                        st.dataframe(tech_taken[["Course Code", "Level", "Credit"]].reset_index(drop=True))
                 else:
                     st.warning("No technical electives marked as completed (Flag = 1)")
 
