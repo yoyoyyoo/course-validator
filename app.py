@@ -11,12 +11,18 @@ degree_file = st.file_uploader("Upload Student Record (EE_202X.xlsx)", type=["xl
 
 if course_file and degree_file:
     try:
-        # Read course info
+        # Read and clean course info
         course_df = pd.read_excel(course_file)
-        course_df.columns = [col.strip().capitalize() for col in course_df.columns]
+        course_df.columns = [col.strip() for col in course_df.columns]
+        course_df.rename(columns=lambda x: x.strip().title(), inplace=True)
+
+        if "Course Code" not in course_df.columns:
+            st.error("❌ 'Course Code' column not found in uploaded test_courses.xlsx")
+            st.stop()
+
         course_df["Course Code"] = course_df["Course Code"].str.strip().str.upper()
 
-        # Read ElecEng sheet
+        # Read degree plan
         degree_df = pd.read_excel(degree_file, sheet_name=None)
         eleceng = degree_df.get("ElecEng")
 
@@ -24,7 +30,7 @@ if course_file and degree_file:
             st.error("❌ 'ElecEng' sheet not found.")
             st.stop()
 
-        # 🧩 Find section indices
+        # Find section indices
         section_indices = {}
         for i, val in enumerate(eleceng.iloc[:, 0]):
             if isinstance(val, str):
@@ -42,7 +48,7 @@ if course_file and degree_file:
                 elif "list b" in key:
                     section_indices["tech_end"] = i
 
-        # 🧮 CORE COURSES (incomplete only)
+        # 🧮 CORE COURSES
         if "core_start" in section_indices and "core_end" in section_indices:
             core = eleceng.iloc[section_indices["core_start"] + 1:section_indices["core_end"], [0, 1]].copy()
             core.columns = ["Course", "Flag"]
@@ -50,8 +56,7 @@ if course_file and degree_file:
             core["Flag"] = pd.to_numeric(core["Flag"], errors="coerce").fillna(0).astype(int)
             core_missing = core[(core["Flag"] == 0) & (core["Course Code"].notna())]
 
-            merged_core = pd.merge(core_missing, course_df, on="Course Code", how="left")
-            merged_core = merged_core.dropna(subset=["Course Code"])
+            merged_core = pd.merge(core_missing, course_df, on="Course Code", how="inner")
 
             st.subheader("📋 Incomplete Core Courses")
             if not merged_core.empty:
@@ -91,8 +96,8 @@ if course_file and degree_file:
             st.subheader("🛠️ Technical Electives Summary")
             st.markdown(f"✅ Taken: **{total_taken}**")
             st.markdown(f"✅ 400-level or above: **{taken_400}**")
-            st.markdown(f"❗ Still Required: **5 technical electives total, all 5 must be 400-level**")
-            st.markdown(f"❗ You still need **{missing_400}** more 400-level technical electives.")
+            st.markdown(f"❗ You still need **5 400-level technical electives**.")
+            st.markdown(f"❗ Missing 400-level: **{missing_400}**")
 
             if not tech_completed.empty:
                 st.markdown("**Courses Taken:**")
