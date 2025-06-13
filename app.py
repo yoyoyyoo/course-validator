@@ -2,92 +2,93 @@ import streamlit as st
 import pandas as pd
 import re
 
-st.set_page_config(page_title="EE Validator", layout="centered")
-st.title("📘 Electrical Engineering Course Validator")
+st.set_page_config(page_title="Course Validator", layout="centered")
+st.title("📘 Course Completion Validator")
 
-# Upload files
+# file upload
 course_file = st.file_uploader("Upload Course Info (test_courses.xlsx)", type=["xlsx"])
-record_file = st.file_uploader("Upload Student Record (EE_20xx.xlsx)", type=["xlsx"])
+student_file = st.file_uploader("Upload Student Progress (EE_2025 or CE)", type=["xlsx"])
 
-def extract_course_code(text):
-    """Extract standardized course code like ELEC 270 from string"""
-    if pd.isna(text):
-        return None
-    match = re.match(r"([A-Z]{4})\s?(\d{3})", str(text).strip())
-    if match:
-        return f"{match.group(1)} {match.group(2)}"
-    return None
-
-if course_file and record_file:
+if course_file and student_file:
     try:
         course_df = pd.read_excel(course_file)
-        course_df["Course Code"] = course_df["Course Code"].str.strip().str.upper()
+        student_sheets = pd.read_excel(student_file, sheet_name=None)
 
-        student_sheets = pd.read_excel(record_file, sheet_name=None)
-        if "ElecEng" not in student_sheets:
-            st.error("❌ 'ElecEng' sheet not found.")
+        # ✅ ElecEng or CompEng sheet
+        possible_sheets = ["ElecEng", "CompEng"]
+        sheet_name = next((s for s in possible_sheets if s in student_sheets), None)
+
+        if not sheet_name:
+            st.error("❌ Could not find a valid sheet. Expecting 'ElecEng' or 'CompEng'.")
             st.stop()
 
-        df = student_sheets["ElecEng"]
+        student_df = student_sheets[sheet_name]
 
-        # Identify section titles
-        section_titles = df.iloc[:, 0].astype(str).str.lower()
-        core_start = section_titles[section_titles.str.contains("common core")].index[0] + 1
-        core_end = section_titles[section_titles.str.contains("program core")].index[0]
-        prog_start = core_end + 1
-        prog_end = section_titles[section_titles.str.contains("complementary studies")].index[0]
-        comp_start = prog_end + 1
-        comp_end = section_titles[section_titles.str.contains("subtotal complementary")].index[0]
-        tech_start = section_titles[section_titles.str.contains("list a:")].index[0]
-        tech_end = section_titles[section_titles.str.contains("list b:")].index[0]
+        # course info
+        course_df.columns = [col.strip() for col in course_df.columns]
+        course_df["Course Code"] = course_df["Course Code"].str.strip().str.upper()
 
-        # 🟡 Incomplete Core Courses (must exist in test_courses)
-        core_df = df.iloc[prog_start:prog_end, [0, 1]].copy()
-        core_df.columns = ["Raw", "Flag"]
-        core_df["Course Code"] = core_df["Raw"].apply(extract_course_code)
-        core_df["Flag"] = pd.to_numeric(core_df["Flag"], errors="coerce").fillna(0).astype(int)
-        core_df = core_df[core_df["Flag"] == 0]
-        merged_core = pd.merge(core_df, course_df, on="Course Code", how="inner")
+        # section locate
+        section_titles = student_df.iloc[:, 0].astype(str)
+        core_start = section_titles[section_titles.str.contains("Common core", case=False)].index[0]
+        core_end = section_titles[section_titles.str.contains("Program core", case=False)].index[0]
+        progcore_end = section_titles[section_titles.str.contains("Subtotal program core", case=False)].index[0]
+        comp_start = section_titles[section_titles.str.contains("Complementary studies", case=False)].index[0]
+        comp_end = section_titles[section_titles.str.contains("Subtotal complementary", case=False)].index[0]
+        tech_start = section_titles[section_titles.str.contains("List A:", case=False)].index[0]
+        tech_end = section_titles[section_titles.str.contains("List B:", case=False)].index[0]
 
+        # 🟦 complementary
+        core = student_df.iloc[core_end + 1:progcore_end].copy()
+        core.columns = student_df.iloc[core_start + 1]
+        core = core[core["Flag"] == 0]
+        core["Course Code"] = core.iloc[:, 0].astype(str).str.extract(r"([A-Z]{4}\s?\d{3})")[0].str.strip()
+        core = core.dropna(subset=["Course Code"])
+        core = pd.merge(core, course_df, on="Course Code", how="inner")  
         st.subheader("📋 Incomplete Core Courses")
-        if merged_core.empty:
+        if core.empty:
             st.success("✅ All core courses completed.")
         else:
-            st.dataframe(merged_core[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions", "Term"]])
+            st.dataframe(core[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions", "Term"]])
 
         # 🧾 Complementary Studies
-        comp_df = df.iloc[comp_start:comp_end, [0, 1]].copy()
-        comp_df.columns = ["Course", "Flag"]
-        comp_df["Flag"] = pd.to_numeric(comp_df["Flag"], errors="coerce").fillna(0).astype(int)
-        comp_taken = comp_df[comp_df["Flag"] == 1]
+        comp = student_df.iloc[comp_start + 2:comp_end, [0, 1]].copy()
+        comp.columns = ["Course", "Flag"]
+        comp["Flag"] = pd.to_numeric(comp["Flag"], errors="coerce").fillna(0).astype(int)
+        comp_taken = comp[comp["Flag"] == 1]
 
-        st.subheader("📑 Complementary Studies Summary")
+        st.subheader("🧾 Complementary Studies Summary")
         st.markdown(f"✅ Completed: **{len(comp_taken)}**")
         st.markdown(f"❗ Still Required: **{max(0, 3 - len(comp_taken))}**")
         if not comp_taken.empty:
             st.markdown("**Courses Taken:**")
-            for c in comp_taken["Course"]:
-                st.markdown(f"- {c}")
+            for course in comp_taken["Course"]:
+                st.markdown(f"- {course}")
 
-        # 🧰 Technical Electives
-        tech_df = df.iloc[tech_start:tech_end, [0, 1]].copy()
-        tech_df.columns = ["Raw", "Flag"]
-        tech_df["Course Code"] = tech_df["Raw"].apply(extract_course_code)
-        tech_df["Flag"] = pd.to_numeric(tech_df["Flag"], errors="coerce").fillna(0).astype(int)
+        # 🛠 Technical Electives
+        tech = student_df.iloc[tech_start + 1:tech_end, [0, 1]].copy()
+        tech.columns = ["Course", "Flag"]
+        tech["Flag"] = pd.to_numeric(tech["Flag"], errors="coerce").fillna(0).astype(int)
+        tech_taken = tech[tech["Flag"] == 1].copy()
+        tech_taken["Course Code"] = tech_taken["Course"].astype(str).str.extract(r"([A-Z]{4}\s?\d{3})")[0].str.strip()
+        tech_taken = tech_taken.dropna(subset=["Course Code"])
+        tech_taken["Level"] = tech_taken["Course Code"].str.extract(r"(\d{3})").astype(float)
 
-        tech_taken = tech_df[(tech_df["Flag"] == 1) & tech_df["Course Code"].notna()]
-        tech_taken["Level"] = tech_taken["Course Code"].str.extract(r'(\d{3})').astype(float)
-        taken_400 = tech_taken[tech_taken["Level"] >= 400]
+        total_taken = len(tech_taken)
+        taken_400 = (tech_taken["Level"] >= 400).sum()
+        missing_400 = max(0, 5 - taken_400)
 
-        st.subheader("🛠️ Technical Electives Summary")
-        st.markdown(f"✅ Taken: **{len(tech_taken)}**")
-        st.markdown(f"✅ 400-level or above: **{len(taken_400)}**")
-        missing_400 = max(0, 5 - len(taken_400))
-        st.markdown(f"❗ You still need **{missing_400} 400-level technical electives.**")
+        st.subheader("🛠 Technical Electives Summary")
+        st.markdown(f"✅ Taken: **{total_taken}**")
+        st.markdown(f"✅ 400-level or above: **{taken_400}**")
+        if total_taken < 5:
+            st.warning(f"❗ You still need **{5 - total_taken}** more technical electives.")
+        if missing_400 > 0:
+            st.warning(f"❗ Missing 400-level: **{missing_400}**")
         if not tech_taken.empty:
             st.markdown("**Courses Taken:**")
-            for c in tech_taken["Raw"]:
-                st.markdown(f"- {c}")
+            for course in tech_taken["Course"]:
+                st.markdown(f"- {course}")
 
     except Exception as e:
-        st.error(f"❌ Error: {e}")
+        st.error(f"❌ Error: {str(e)}")
