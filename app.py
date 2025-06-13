@@ -117,7 +117,7 @@ def main():
                 if core.empty:
                     st.success("✅ All core courses completed")
                 else:
-                    st.dataframe(core[["Course Code", "Name", "Term"]]
+                    st.dataframe(core[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions", "Term"]]
                                  .style.highlight_null("red")
                                  .set_properties(**{'text-align': 'left'}))
 
@@ -152,26 +152,16 @@ def main():
                 taken_400 = (tech_taken["Level"] >= 400).sum()
                 taken_under_400 = total_taken - taken_400
                 
-                # Calculate remaining requirements
-                remaining_total = max(0, 5 - total_taken)
+                # Calculate remaining 400+ level requirements
                 remaining_400 = max(0, 5 - taken_400)
                 
-                # Adjust for cases where student took under-400 courses
-                effective_remaining_400 = max(remaining_400, remaining_total)
+                st.subheader("🛠 Technical Electives")
                 
-                st.subheader("🛠 Technical Electives Summary")
-                
-                # Display requirements
+                # Display metrics
                 cols = st.columns(3)
-                cols[0].metric("Total Taken", f"{total_taken}/5")
-                cols[1].metric("400+ Level Taken", f"{taken_400}/5")
-                cols[2].metric("Under 400 Taken", taken_under_400)
-                
-                # Display remaining requirements
-                st.markdown("**Remaining Requirements:**")
-                req_cols = st.columns(2)
-                req_cols[0].metric("Total Electives Needed", remaining_total)
-                req_cols[1].metric("400+ Level Needed", effective_remaining_400)
+                cols[0].metric("Total Taken", total_taken)
+                cols[1].metric("400+ Level", taken_400)
+                cols[2].metric("400+ Needed", remaining_400)
                 
                 if not tech_taken.empty:
                     with st.expander("View taken electives"):
@@ -181,11 +171,9 @@ def main():
                 else:
                     st.warning("No technical electives marked as completed (Flag = 1)")
                 
-                # Additional guidance
-                if taken_under_400 > 0:
-                    st.warning(f"Note: You've taken {taken_under_400} under-400 level courses. "
-                             f"You need at least {effective_remaining_400} more 400+ level courses "
-                             "to meet the requirements.")
+                # Additional guidance if needed
+                if remaining_400 > 0:
+                    st.warning(f"You need {remaining_400} more 400+ level technical electives")
 
     except Exception as e:
         st.error(f"❌ Error: {str(e)}")
