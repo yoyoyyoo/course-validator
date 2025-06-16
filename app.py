@@ -88,17 +88,18 @@ def main():
             if None in [core_start, core_end, progcore_end]:
                 st.error("❌ Could not locate all core course sections")
             else:
-                
                 common_core = student_df.iloc[core_start + 2:core_end].copy()
                 program_core = student_df.iloc[core_end + 1:progcore_end].copy()
                 column_headers = student_df.iloc[core_start + 1].copy()
                 column_headers.iloc[0] = "Course"
                 common_core.columns = column_headers
                 program_core.columns = column_headers
+                
                 core_df_all = pd.concat([common_core, program_core], ignore_index=True)
                 core_df_all["Flag"] = pd.to_numeric(core_df_all["Flag"], errors="coerce").fillna(0).astype(int)
                 core = core_df_all[core_df_all["Flag"] == 0]
 
+                show_ce_note = False
                 if program_type == "CE":
                     elective_options = ["CMPE 223", "ELEC 376"]
                     completed_codes = core_df_all[core_df_all["Flag"] == 1]["Course"].astype(str)
@@ -106,7 +107,7 @@ def main():
                     if completed_elective:
                         core = core[~core["Course"].astype(str).str.contains("CMPE 223|ELEC 376")]
                     else:
-                        st.warning("⚠️ Note: You only need to complete **either CMPE 223 or ELEC 376** to meet this requirement.")
+                        show_ce_note = True
 
                 core["Course Code"] = core["Course"].astype(str).str.extract(r"([A-Z]{4}\s?\d{3})")[0].str.strip()
                 core = core.dropna(subset=["Course Code"])
@@ -116,6 +117,8 @@ def main():
                     st.success("✅ All core courses completed")
                 else:
                     st.dataframe(core[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions", "Term"]]
+                    if show_ce_note:
+                        st.warning("⚠️ Note: You only need to complete **either CMPE 223 or ELEC 376** to meet this requirement.")
                                  .style.highlight_null("red")
                                  .set_properties(**{'text-align': 'left'}))
 
