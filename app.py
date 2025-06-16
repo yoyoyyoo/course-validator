@@ -3,7 +3,6 @@ import streamlit as st
 import pandas as pd
 import re
 
-# Page config MUST be first
 st.set_page_config(page_title="Course Validator", layout="centered")
 
 def find_section(section_titles, possible_names):
@@ -16,7 +15,6 @@ def find_section(section_titles, possible_names):
 def process_technical_electives(student_df, program_type):
     try:
         section_titles = student_df.iloc[:, 0].astype(str)
-
         if program_type.lower() in ['ce', 'compeng', 'computer']:
             tech_electives_pattern = r"(Courses Offered by ECE|Courses Offered by Other Departments)"
             section_headers = section_titles[section_titles.str.contains(tech_electives_pattern, case=False)].index
@@ -42,14 +40,12 @@ def process_technical_electives(student_df, program_type):
         else:
             st.error(f"Unknown program type: {program_type}")
             return None
-
         tech_df["Flag"] = pd.to_numeric(tech_df["Flag"], errors="coerce").fillna(0).astype(int)
         tech_taken = tech_df[tech_df["Flag"] == 1].copy()
         tech_taken["Course Code"] = tech_taken["Course"].str.extract(r"([A-Z]{4}\s?\d{3})")[0].str.strip()
         tech_taken["Course Name"] = tech_taken["Course"].str.replace(r"[A-Z]{4}\s?\d{3}\s*", "", regex=True).str.strip()
         tech_taken = tech_taken.dropna(subset=["Course Code"])
         tech_taken["Level"] = tech_taken["Course Code"].str.extract(r"(\d{3})").astype(float)
-
         return tech_taken
     except Exception as e:
         st.error(f"Error processing technical electives: {str(e)}")
@@ -62,31 +58,25 @@ def process_technical_electives(student_df, program_type):
 def main():
     st.title("📘 Course Completion Validator")
     st.write("Upload your files to validate course completion")
-
     course_file = st.file_uploader("Course Info (test_courses.xlsx)", type=["xlsx"])
     student_file = st.file_uploader("Student Progress (EE/CE)", type=["xlsx"])
-
     if not course_file or not student_file:
         st.info("ℹ️ Please upload both files to begin validation")
         return
-
     try:
         with st.spinner("Loading files..."):
             course_df = pd.read_excel(course_file)
             student_sheets = pd.read_excel(student_file, sheet_name=None)
             course_df.columns = [col.strip() for col in course_df.columns]
             course_df["Course Code"] = course_df["Course Code"].str.strip().str.upper()
-
         sheet_mapping = {
             'eleceng': 'EE', 'ee': 'EE', 'electrical': 'EE',
             'compeng': 'CE', 'ce': 'CE', 'computer': 'CE'
         }
-
         sheet_name = next((name for name in student_sheets.keys() if name.strip().lower() in sheet_mapping.keys()), None)
         if not sheet_name:
             st.error(f"❌ Couldn't find expected sheet. Available sheets: {list(student_sheets.keys())}")
             return
-
         program_type = sheet_mapping[sheet_name.strip().lower()]
         student_df = student_sheets[sheet_name]
         section_titles = student_df.iloc[:, 0].astype(str)
@@ -95,7 +85,6 @@ def main():
             core_start = find_section(section_titles, ["Common core"])
             core_end = find_section(section_titles, ["Program core", "Technical core"])
             progcore_end = find_section(section_titles, ["Subtotal program core"])
-
             if None in [core_start, core_end, progcore_end]:
                 st.error("❌ Could not locate all core course sections")
             else:
@@ -105,10 +94,18 @@ def main():
                 column_headers.iloc[0] = "Course"
                 common_core.columns = column_headers
                 program_core.columns = column_headers
-                core = pd.concat([common_core, program_core], ignore_index=True)
-                core["Flag"] = pd.to_numeric(core["Flag"], errors="coerce").fillna(0).astype(int)
-                core = core[core["Flag"] == 0]
-                core["Course Code"] = core.iloc[:, 0].astype(str).str.extract(r"([A-Z]{4}\s?\d{3})")[0].str.strip()
+                core_df_all = pd.concat([common_core, program_core], ignore_index=True)
+                core_df_all["Flag"] = pd.to_numeric(core_df_all["Flag"], errors="coerce").fillna(0).astype(int)
+                core = core_df_all[core_df_all["Flag"] == 0]
+
+                if program_type == "CE":
+                    elective_options = ["CMPE 223", "ELEC 376"]
+                    completed_codes = core_df_all[core_df_all["Flag"] == 1]["Course"].astype(str)
+                    completed_elective = any(any(opt in course for opt in elective_options) for course in completed_codes)
+                    if completed_elective:
+                        core = core[~core["Course"].astype(str).str.contains("CMPE 223|ELEC 376")]
+
+                core["Course Code"] = core["Course"].astype(str).str.extract(r"([A-Z]{4}\s?\d{3})")[0].str.strip()
                 core = core.dropna(subset=["Course Code"])
                 core = pd.merge(core, course_df, on="Course Code", how="inner")
                 st.subheader("📋 Incomplete Core Courses")
