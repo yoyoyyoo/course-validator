@@ -116,11 +116,14 @@ def main():
                 if core.empty:
                     st.success("✅ All core courses completed")
                 else:
-                    st.dataframe(core[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions", "Term"]]
+                    st.dataframe(
+                        core[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions", "Term"]]
+                            .style.highlight_null("red")
+                            .set_properties(**{'text-align': 'left'})
+                    )
+
                     if show_ce_note:
                         st.warning("⚠️ Note: You only need to complete **either CMPE 223 or ELEC 376** to meet this requirement.")
-                                 .style.highlight_null("red")
-                                 .set_properties(**{'text-align': 'left'}))
 
         with st.spinner("Checking complementary studies..."):
             comp_start = find_section(section_titles, ["Complementary studies"])
