@@ -104,6 +104,9 @@ def main():
                     completed_elective = any(any(opt in course for opt in elective_options) for course in completed_codes)
                     if completed_elective:
                         core = core[~core["Course"].astype(str).str.contains("CMPE 223|ELEC 376")]
+                    else:
+                        st.info("💡 Note: You only need to complete **either CMPE 223 or ELEC 376** to satisfy this requirement.")
+                        core = core[~core["Course"].astype(str).str.contains("CMPE 223|ELEC 376")]
 
                 core["Course Code"] = core["Course"].astype(str).str.extract(r"([A-Z]{4}\s?\d{3})")[0].str.strip()
                 core = core.dropna(subset=["Course Code"])
