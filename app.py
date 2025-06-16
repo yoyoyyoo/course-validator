@@ -101,7 +101,8 @@ def main():
             else:
                 common_core = student_df.iloc[core_start + 2:core_end].copy()
                 program_core = student_df.iloc[core_end + 1:progcore_end].copy()
-                column_headers = student_df.iloc[core_start + 1]
+                column_headers = student_df.iloc[core_start + 1].copy()
+                column_headers.iloc[0] = "Course"
                 common_core.columns = column_headers
                 program_core.columns = column_headers
                 core = pd.concat([common_core, program_core], ignore_index=True)
