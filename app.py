@@ -163,42 +163,47 @@ def main():
                 if remaining_400 > 0:
                     st.warning(f"You need {remaining_400} more 400+ level technical electives")
 
-        with st.spinner("Loading program summary..."):
-            summary_start = section_titles.str.contains("Program summary", case=False, na=False)
-            if summary_start.any():
-                start_row = summary_start.idxmax()
-                summary_df = student_df.iloc[start_row:start_row + 12].copy()
-                summary_df.reset_index(drop=True, inplace=True)
+with st.spinner("Loading program summary..."):
+    summary_start = section_titles.str.contains("Program summary", case=False, na=False)
+    if summary_start.any():
+        start_row = summary_start.idxmax()
+        summary_df = student_df.iloc[start_row:start_row + 15].copy()
+        summary_df.reset_index(drop=True, inplace=True)
 
-                summary_df.columns = summary_df.iloc[1].astype(str)
-                summary_df = summary_df[2:]
-                summary_df = summary_df.dropna(axis=1, how="all")
+        # 手动设定列名：第二行作为标题，首列命名为 Section
+        new_columns = summary_df.iloc[1].astype(str).tolist()
+        new_columns[0] = "Section"
+        summary_df.columns = new_columns
 
-                first_col = summary_df.columns[0]
-                summary_df[first_col] = summary_df[first_col].astype(str).str.replace(r"[^\w\s\-/]+", "", regex=True)
-                summary_df = summary_df.set_index(first_col)
+        # 去除标题行前两行和所有空行
+        summary_df = summary_df[2:]
+        summary_df = summary_df.dropna(how="all")  # 删除全空行
+        summary_df = summary_df.dropna(axis=1, how="all")  # 删除全空列
 
-                def style_program_summary(row):
-                    styles = []
-                    row_name = row.name.strip().lower()
-                    for val in row:
-                        style = ""
-                        if row_name == "difference" and pd.notna(val) and isinstance(val, (int, float)) and float(val) < 0:
-                            style += "background-color: red; color: white"
-                        if row_name == "requirements for total program":
-                            style += "; color: blue"
-                        if row_name == "total for program":
-                            style += "; font-weight: bold"
-                        styles.append(style)
-                    return styles
+        # 设置 Section 为索引
+        summary_df["Section"] = summary_df["Section"].astype(str).str.strip()
+        summary_df = summary_df.set_index("Section")
 
-                st.subheader("📊 Program Summary")
-                st.dataframe(
-                    summary_df.style.apply(style_program_summary, axis=1),
-                    use_container_width=True
-                )
-            else:
-                st.info("ℹ️ Program summary not found in the uploaded file.")
+        # 样式函数：红色高亮 Difference 负数，蓝色字体 Requirements，总计加粗
+        def style_program_summary(row):
+            styles = []
+            row_name = row.name.strip().lower()
+            for val in row:
+                style = ""
+                if row_name == "difference" and pd.notna(val) and isinstance(val, (int, float)) and float(val) < 0:
+                    style += "background-color: red; color: white"
+                if row_name == "requirements for total program":
+                    style += "; color: blue"
+                if row_name == "total for program":
+                    style += "; font-weight: bold"
+                styles.append(style)
+            return styles
+
+        st.subheader("📊 Program Summary")
+        st.dataframe(summary_df.style.apply(style_program_summary, axis=1), use_container_width=True)
+    else:
+        st.info("ℹ️ Program summary not found in the uploaded file.")
+
     except Exception as e:
         st.error(f"❌ Error: {str(e)}")
         with st.expander("Technical details"):
