@@ -169,8 +169,8 @@ def main():
                 start_row = summary_start.idxmax()
                 summary_df = student_df.iloc[start_row:start_row + 12].copy()
                 summary_df.reset_index(drop=True, inplace=True)
-                summary_df.columns = summary_df.iloc[1]  # 取第2行为列名
-                summary_df = summary_df[2:]              # 去掉前两行
+                summary_df.columns = summary_df.iloc[1].astype(str)  
+                summary_df = summary_df[2:]
                 summary_df = summary_df.set_index(summary_df.columns[0])
                 st.subheader("📊 Program Summary")
                 st.dataframe(summary_df, use_container_width=True)
