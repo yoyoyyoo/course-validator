@@ -179,6 +179,8 @@ def main():
 
                 summary_df["Section"] = summary_df["Section"].astype(str).str.strip()
                 summary_df = summary_df.set_index("Section")
+                summary_df = summary_df.applymap(lambda x: f"{x:.2f}" if isinstance(x, (float, int)) else x)
+
 
                 def style_program_summary(row):
                     styles = []
