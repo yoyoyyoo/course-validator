@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import re
@@ -69,6 +68,7 @@ def main():
             student_sheets = pd.read_excel(student_file, sheet_name=None)
             course_df.columns = [col.strip() for col in course_df.columns]
             course_df["Course Code"] = course_df["Course Code"].str.strip().str.upper()
+
         sheet_mapping = {
             'eleceng': 'EE', 'ee': 'EE', 'electrical': 'EE',
             'compeng': 'CE', 'ce': 'CE', 'computer': 'CE'
@@ -112,16 +112,18 @@ def main():
                 core["Course Code"] = core["Course"].astype(str).str.extract(r"([A-Z]{4}\s?\d{3})")[0].str.strip()
                 core = core.dropna(subset=["Course Code"])
                 core = pd.merge(core, course_df, on="Course Code", how="inner")
-                st.subheader("📋 Incomplete Core Courses ({len(core)})")
+
+                st.subheader(f"📋 Incomplete Core Courses ({len(core)})")
                 if core.empty:
                     st.success("✅ All core courses completed")
                 else:
+                    core_display = core[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions", "Term"]].reset_index(drop=True)
+                    core_display.index += 1
                     st.dataframe(
-                        core[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions", "Term"]]
-                            .style.highlight_null("red")
+                        core_display.style
+                            .highlight_null("red")
                             .set_properties(**{'text-align': 'left'})
                     )
-
                     if show_ce_note:
                         st.warning("⚠️ Note: For CMPE 223 and ELEC 376, only one course is required.")
 
