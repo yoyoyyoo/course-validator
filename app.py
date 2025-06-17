@@ -169,14 +169,36 @@ def main():
                 start_row = summary_start.idxmax()
                 summary_df = student_df.iloc[start_row:start_row + 12].copy()
                 summary_df.reset_index(drop=True, inplace=True)
-                summary_df.columns = summary_df.iloc[1].astype(str)  
+
+                summary_df.columns = summary_df.iloc[1].astype(str)
                 summary_df = summary_df[2:]
-                summary_df = summary_df.set_index(summary_df.columns[0])
+                summary_df = summary_df.dropna(axis=1, how="all")
+
+                first_col = summary_df.columns[0]
+                summary_df[first_col] = summary_df[first_col].astype(str).str.replace(r"[^\w\s\-/]+", "", regex=True)
+                summary_df = summary_df.set_index(first_col)
+
+                def style_program_summary(row):
+                    styles = []
+                    row_name = row.name.strip().lower()
+                    for val in row:
+                        style = ""
+                        if row_name == "difference" and pd.notna(val) and isinstance(val, (int, float)) and float(val) < 0:
+                            style += "background-color: red; color: white"
+                        if row_name == "requirements for total program":
+                            style += "; color: blue"
+                        if row_name == "total for program":
+                            style += "; font-weight: bold"
+                        styles.append(style)
+                    return styles
+
                 st.subheader("📊 Program Summary")
-                st.dataframe(summary_df, use_container_width=True)
+                st.dataframe(
+                    summary_df.style.apply(style_program_summary, axis=1),
+                    use_container_width=True
+                )
             else:
                 st.info("ℹ️ Program summary not found in the uploaded file.")
-
     except Exception as e:
         st.error(f"❌ Error: {str(e)}")
         with st.expander("Technical details"):
