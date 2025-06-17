@@ -179,7 +179,12 @@ def main():
 
                 summary_df["Section"] = summary_df["Section"].astype(str).str.strip()
                 summary_df = summary_df.set_index("Section")
-                summary_df = summary_df.applymap(lambda x: f"{x:.2f}" if isinstance(x, (float, int)) else x)
+                st.dataframe(
+                    summary_df.style
+                    .apply(style_program_summary, axis=1)
+                    .format(precision=2),  # 保留两位小数但不转字符串
+                    use_container_width=True
+                )
 
 
                 def style_program_summary(row):
