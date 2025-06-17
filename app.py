@@ -121,7 +121,6 @@ def main():
                     core_display.index += 1
                     st.dataframe(
                         core_display.style
-                            .highlight_null("red")
                             .set_properties(**{'text-align': 'left'})
                     )
                     if show_ce_note:
