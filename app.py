@@ -112,7 +112,7 @@ def main():
                 core["Course Code"] = core["Course"].astype(str).str.extract(r"([A-Z]{4}\s?\d{3})")[0].str.strip()
                 core = core.dropna(subset=["Course Code"])
                 core = pd.merge(core, course_df, on="Course Code", how="inner")
-                st.subheader("📋 Incomplete Core Courses")
+                st.subheader("📋 Incomplete Core Courses ({len(core)})")
                 if core.empty:
                     st.success("✅ All core courses completed")
                 else:
@@ -123,7 +123,7 @@ def main():
                     )
 
                     if show_ce_note:
-                        st.warning("⚠️ Note: You only need to complete **either CMPE 223 or ELEC 376** to meet this requirement.")
+                        st.warning("⚠️ Note: For CMPE 223 and ELEC 376, only one course is required.")
 
         with st.spinner("Checking complementary studies..."):
             comp_start = find_section(section_titles, ["Complementary studies"])
