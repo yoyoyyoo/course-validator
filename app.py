@@ -11,6 +11,24 @@ def find_section(section_titles, possible_names):
             return matches.idxmax()
     return None
 
+def dedup_columns(cols):
+    seen = {}
+    result = []
+    for col in cols:
+        if col not in seen:
+            seen[col] = 1
+            result.append(col)
+        else:
+            count = seen[col]
+            new_col = f"{col}.{count}"
+            while new_col in seen:
+                count += 1
+                new_col = f"{col}.{count}"
+            seen[col] += 1
+            seen[new_col] = 1
+            result.append(new_col)
+    return result
+
 def process_technical_electives(student_df, program_type):
     try:
         section_titles = student_df.iloc[:, 0].astype(str)
@@ -197,13 +215,11 @@ def main():
                 summary_df = summary_df.dropna(axis=1, how="all")
 
                 summary_df["Section"] = summary_df["Section"].astype(str).str.strip()
-
                 summary_df["Section"] = summary_df["Section"].str.replace("Requirements for program", "Requirements for total program", regex=False)
-
                 summary_df = summary_df.drop_duplicates(subset="Section")
 
-                # FINAL CORRECT DEDUPLICATE
-                summary_df.columns = pd.io.parsers.read_csv.__globals__['_maybe_dedup_names'](summary_df.columns)
+                # FINAL dedup columns
+                summary_df.columns = dedup_columns(summary_df.columns)
 
                 summary_df = summary_df.set_index("Section")
 
