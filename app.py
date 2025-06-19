@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import re
 
-# Page config
 st.set_page_config(page_title="Course Validator", layout="centered")
 
 def find_section(section_titles, possible_names):
@@ -128,11 +127,16 @@ def main():
                 if core.empty:
                     st.success("✅ All core courses completed")
                 else:
-                    st.dataframe(
+                    styled_core = (
                         core[["Course Code", "Name", "Prerequisite", "Corequisite", "Exclusions", "Term"]]
-                            .style.highlight_null("red")
-                            .set_properties(**{'text-align': 'left'})
+                        .copy()
+                        .reset_index(drop=True)
+                        .style
+                        .highlight_null("red")
+                        .set_properties(**{'text-align': 'left'})
                     )
+
+                    st.dataframe(styled_core)
 
                     if show_ce_note:
                         st.warning("⚠️ Note: You only need to complete **either CMPE 223 or ELEC 376** to meet this requirement.")
