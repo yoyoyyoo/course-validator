@@ -201,8 +201,11 @@ def main():
                 # FIX CE vs EE mismatch
                 summary_df["Section"] = summary_df["Section"].str.replace("Requirements for program", "Requirements for total program", regex=False)
 
-                # REMOVE DUPLICATES
+                # REMOVE DUPLICATES index
                 summary_df = summary_df.drop_duplicates(subset="Section")
+
+                # DEDUPLICATE COLUMNS — FIX FOR CE 2026 / EE 2026
+                summary_df.columns = pd.io.parsers.ParserBase({'names':summary_df.columns})._maybe_dedup_names(summary_df.columns)
 
                 # Set index safely
                 summary_df = summary_df.set_index("Section")
