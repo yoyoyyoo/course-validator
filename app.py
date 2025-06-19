@@ -197,6 +197,14 @@ def main():
                 summary_df = summary_df.dropna(axis=1, how="all")
 
                 summary_df["Section"] = summary_df["Section"].astype(str).str.strip()
+
+                # FIX CE vs EE mismatch
+                summary_df["Section"] = summary_df["Section"].str.replace("Requirements for program", "Requirements for total program", regex=False)
+
+                # REMOVE DUPLICATES
+                summary_df = summary_df.drop_duplicates(subset="Section")
+
+                # Set index safely
                 summary_df = summary_df.set_index("Section")
 
                 def style_program_summary(row):
