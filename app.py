@@ -39,12 +39,14 @@ def process_technical_electives(student_df, program_type):
         else:
             st.error(f"Unknown program type: {program_type}")
             return None
+
         tech_df["Flag"] = pd.to_numeric(tech_df["Flag"], errors="coerce").fillna(0).astype(int)
         tech_taken = tech_df[tech_df["Flag"] == 1].copy()
         tech_taken["Course Code"] = tech_taken["Course"].str.extract(r"([A-Z]{4}\s?\d{3})")[0].str.strip()
         tech_taken["Course Name"] = tech_taken["Course"].str.replace(r"[A-Z]{4}\s?\d{3}\s*", "", regex=True).str.strip()
         tech_taken = tech_taken.dropna(subset=["Course Code"])
         tech_taken["Level"] = tech_taken["Course Code"].str.extract(r"(\d{3})").astype(float)
+
         return tech_taken
     except Exception as e:
         st.error(f"Error processing technical electives: {str(e)}")
@@ -57,11 +59,14 @@ def process_technical_electives(student_df, program_type):
 def main():
     st.title("📘 Course Completion Validator")
     st.write("Upload your files to validate course completion")
+
     course_file = st.file_uploader("Course Info (test_courses.xlsx)", type=["xlsx"])
     student_file = st.file_uploader("Student Progress (EE/CE)", type=["xlsx"])
+
     if not course_file or not student_file:
         st.info("ℹ️ Please upload both files to begin validation")
         return
+
     try:
         with st.spinner("Loading files..."):
             course_df = pd.read_excel(course_file)
@@ -73,18 +78,22 @@ def main():
             'eleceng': 'EE', 'ee': 'EE', 'electrical': 'EE',
             'compeng': 'CE', 'ce': 'CE', 'computer': 'CE'
         }
+
         sheet_name = next((name for name in student_sheets.keys() if name.strip().lower() in sheet_mapping.keys()), None)
         if not sheet_name:
             st.error(f"❌ Couldn't find expected sheet. Available sheets: {list(student_sheets.keys())}")
             return
+
         program_type = sheet_mapping[sheet_name.strip().lower()]
         student_df = student_sheets[sheet_name]
         section_titles = student_df.iloc[:, 0].astype(str)
 
+        # CORE COURSES
         with st.spinner("Analyzing core courses..."):
             core_start = find_section(section_titles, ["Common core"])
             core_end = find_section(section_titles, ["Program core", "Technical core"])
             progcore_end = find_section(section_titles, ["Subtotal program core"])
+
             if None in [core_start, core_end, progcore_end]:
                 st.error("❌ Could not locate all core course sections")
             else:
@@ -123,6 +132,7 @@ def main():
                     if show_ce_note:
                         st.warning("⚠️ Note: For CMPE 223 and ELEC 376, only one course is required.")
 
+        # COMPLEMENTARY STUDIES
         with st.spinner("Checking complementary studies..."):
             comp_start = find_section(section_titles, ["Complementary studies"])
             comp_end = find_section(section_titles, ["Subtotal complementary"])
@@ -133,14 +143,17 @@ def main():
                 comp.columns = ["Course", "Flag"]
                 comp["Flag"] = pd.to_numeric(comp["Flag"], errors="coerce").fillna(0).astype(int)
                 comp_taken = comp[comp["Flag"] == 1]
+
                 st.subheader("🧾 Complementary Studies")
                 cols = st.columns(2)
                 cols[0].metric("Completed", len(comp_taken))
                 cols[1].metric("Still Required", max(0, 3 - len(comp_taken)))
+
                 if not comp_taken.empty:
                     with st.expander("View taken courses"):
                         st.dataframe(comp_taken.reset_index(drop=True))
 
+        # TECHNICAL ELECTIVES
         with st.spinner("Analyzing technical electives..."):
             tech_taken = process_technical_electives(student_df, program_type)
             if tech_taken is not None:
@@ -148,23 +161,29 @@ def main():
                 total_taken = len(tech_taken)
                 taken_400 = (tech_taken["Level"] >= 400).sum()
                 remaining_400 = max(0, required_400 - taken_400)
+
                 st.subheader(f"🛠 Technical Electives ({program_type} Requirements)")
                 cols = st.columns(3)
                 cols[0].metric("Total Taken", total_taken)
                 cols[1].metric("400+ Level", taken_400)
                 cols[2].metric("400+ Needed", remaining_400)
+
                 if not tech_taken.empty:
                     with st.expander("View taken electives"):
-                        st.dataframe(tech_taken[["Course Code", "Course Name", "Level"]]
-                                     .sort_values("Level", ascending=False)
-                                     .reset_index(drop=True))
+                        st.dataframe(
+                            tech_taken[["Course Code", "Course Name", "Level"]]
+                                .sort_values("Level", ascending=False)
+                                .reset_index(drop=True)
+                        )
                 else:
                     st.warning("No technical electives marked as completed (Flag = 1)")
+
                 if remaining_400 > 0:
                     st.warning(f"You need {remaining_400} more 400+ level technical electives")
 
+        # PROGRAM SUMMARY
         with st.spinner("Loading program summary..."):
-            summary_start = section_titles.str.contains("Program summary", case=False, na=False)
+            summary_start = section_titles.str.contains(r"(program summary)", case=False, na=False)
             if summary_start.any():
                 start_row = summary_start.idxmax()
                 summary_df = student_df.iloc[start_row:start_row + 15].copy()
@@ -203,6 +222,7 @@ def main():
                 )
             else:
                 st.info("ℹ️ Program summary not found in the uploaded file.")
+
     except Exception as e:
         st.error(f"❌ Error: {str(e)}")
         with st.expander("Technical details"):
