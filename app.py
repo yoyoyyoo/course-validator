@@ -11,6 +11,24 @@ def find_section(section_titles, possible_names):
             return matches.idxmax()
     return None
 
+def dedup_columns(cols):
+    seen = {}
+    result = []
+    for col in cols:
+        if col not in seen:
+            seen[col] = 1
+            result.append(col)
+        else:
+            count = seen[col]
+            new_col = f"{col}.{count}"
+            while new_col in seen:
+                count += 1
+                new_col = f"{col}.{count}"
+            seen[col] += 1
+            seen[new_col] = 1
+            result.append(new_col)
+    return result
+
 def process_technical_electives(student_df, program_type):
     try:
         section_titles = student_df.iloc[:, 0].astype(str)
@@ -152,89 +170,3 @@ def main():
                 if not comp_taken.empty:
                     with st.expander("View taken courses"):
                         st.dataframe(comp_taken.reset_index(drop=True))
-
-        # TECHNICAL ELECTIVES
-        with st.spinner("Analyzing technical electives..."):
-            tech_taken = process_technical_electives(student_df, program_type)
-            if tech_taken is not None:
-                required_400 = 5
-                total_taken = len(tech_taken)
-                taken_400 = (tech_taken["Level"] >= 400).sum()
-                remaining_400 = max(0, required_400 - taken_400)
-
-                st.subheader(f"🛠 Technical Electives ({program_type} Requirements)")
-                cols = st.columns(3)
-                cols[0].metric("Total Taken", total_taken)
-                cols[1].metric("400+ Level", taken_400)
-                cols[2].metric("400+ Needed", remaining_400)
-
-                if not tech_taken.empty:
-                    with st.expander("View taken electives"):
-                        st.dataframe(
-                            tech_taken[["Course Code", "Course Name", "Level"]]
-                                .sort_values("Level", ascending=False)
-                                .reset_index(drop=True)
-                        )
-                else:
-                    st.warning("No technical electives marked as completed (Flag = 1)")
-
-                if remaining_400 > 0:
-                    st.warning(f"You need {remaining_400} more 400+ level technical electives")
-
-        # PROGRAM SUMMARY
-        with st.spinner("Loading program summary..."):
-            summary_start = section_titles.str.contains(r"(program summary)", case=False, na=False)
-            if summary_start.any():
-                start_row = summary_start.idxmax()
-                summary_df = student_df.iloc[start_row:start_row + 15].copy()
-                summary_df.reset_index(drop=True, inplace=True)
-
-                new_columns = summary_df.iloc[1].astype(str).tolist()
-                new_columns[0] = "Section"
-                summary_df.columns = new_columns
-                summary_df = summary_df[2:]
-                summary_df = summary_df.dropna(how="all")
-                summary_df = summary_df.dropna(axis=1, how="all")
-
-                summary_df["Section"] = summary_df["Section"].astype(str).str.strip()
-
-                summary_df["Section"] = summary_df["Section"].str.replace("Requirements for program", "Requirements for total program", regex=False)
-
-                summary_df = summary_df.drop_duplicates(subset="Section")
-
-                # FINAL CORRECT DEDUPLICATE
-                summary_df.columns = pd.io.parsers.read_csv.__globals__['_maybe_dedup_names'](summary_df.columns)
-
-                summary_df = summary_df.set_index("Section")
-
-                def style_program_summary(row):
-                    styles = []
-                    row_name = row.name.strip().lower()
-                    for val in row:
-                        style = ""
-                        if row_name == "difference" and pd.notna(val) and isinstance(val, (int, float)) and float(val) < 0:
-                            style += "background-color: red; color: white"
-                        if row_name == "requirements for total program":
-                            style += "; color: blue"
-                        if row_name == "total for program":
-                            style += "; font-weight: bold"
-                        styles.append(style)
-                    return styles
-
-                st.subheader("📊 Program Summary")
-                st.dataframe(
-                    summary_df.style
-                        .apply(style_program_summary, axis=1)
-                        .format(precision=2),
-                    use_container_width=True
-                )
-            else:
-                st.info("ℹ️ Program summary not found in the uploaded file.")
-
-    except Exception as e:
-        st.error(f"❌ Error: {str(e)}")
-        with st.expander("Technical details"):
-            st.exception(e)
-
-if __name__ == "__main__":
-    main()
