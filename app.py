@@ -209,9 +209,9 @@ def main():
                 end_idx = possible_end[possible_end].index
                 end_idx = end_idx[end_idx > start_row]
                 if len(end_idx) > 0:
-                    stop_row = end_idx[0] + 1
+                    stop_row = end_idx[0] + 3  # *** +3 rows to include Requirements & Difference rows ***
                 else:
-                    stop_row = start_row + 20
+                    stop_row = start_row + 25
 
                 summary_df = student_df.iloc[start_row:stop_row].copy()
                 summary_df.reset_index(drop=True, inplace=True)
