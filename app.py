@@ -259,46 +259,5 @@ def main():
         with st.expander("Technical details"):
             st.exception(e)
 
-        # SAVE AS HTML BUTTON
-        with st.spinner("Preparing HTML export..."):
-            # Create HTML content — you can customize header here:
-            html_header = "<h1>Course Completion Report</h1>"
-            html_parts = []
-
-            # Core Courses
-            if not core.empty:
-                html_parts.append("<h2>Incomplete Core Courses</h2>")
-                html_parts.append(core_display.to_html(index=True, escape=False))
-
-            # Complementary Studies
-            html_parts.append("<h2>Complementary Studies</h2>")
-            html_parts.append(comp_taken.to_html(index=False, escape=False))
-
-            # Technical Electives
-            if tech_taken is not None and not tech_taken.empty:
-                html_parts.append("<h2>Technical Electives</h2>")
-                html_parts.append(
-                    tech_taken[["Course Code", "Course Name", "Level"]]
-                    .sort_values("Level", ascending=False)
-                    .reset_index(drop=True)
-                    .to_html(index=False, escape=False)
-                )
-
-            # Program Summary
-            html_parts.append("<h2>Program Summary</h2>")
-            html_parts.append(summary_df.to_html(escape=False))
-
-            # Combine all HTML parts
-            html_content = html_header + "".join(html_parts)
-
-            # Download button
-            st.download_button(
-                "📥 Save as HTML",
-                html_content,
-                file_name="course_report.html",
-                mime="text/html"
-            )
-
-
 if __name__ == "__main__":
     main()
