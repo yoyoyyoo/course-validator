@@ -259,45 +259,57 @@ def main():
         with st.expander("Technical details"):
             st.exception(e)
     
-	# SAVE AS HTML BUTTON
-    with st.spinner("Preparing HTML export..."):
-        # Create HTML content — you can customize header here:
-        html_header = "<h1>Course Completion Report</h1>"
+	# FULL HTML EXPORT WITH HEADINGS, NOTES, METRICS
+    with st.spinner("Preparing full HTML export..."):
         html_parts = []
+        html_parts.append(f"<h1>Course Completion Report — {program_type}</h1>")
 
-        # Core Courses
-        if not core.empty:
-            html_parts.append("<h2>Incomplete Core Courses</h2>")
+        # CORE COURSES
+        html_parts.append(f"<h2>📋 Incomplete Core Courses ({len(core)})</h2>")
+        if core.empty:
+            html_parts.append("<p style='color:green;'>✅ All core courses completed</p>")
+        else:
             html_parts.append(core_display.to_html(index=True, escape=False))
+            if show_ce_note:
+                html_parts.append("<p style='color:orange;'>⚠️ Note: For CMPE 223 and ELEC 376, only one course is required.</p>")
 
-        # Complementary Studies
-        html_parts.append("<h2>Complementary Studies</h2>")
+        # COMPLEMENTARY STUDIES
+        comp_completed = len(comp_taken)
+        comp_required = max(0, 3 - comp_completed)
+        html_parts.append("<h2>🧾 Complementary Studies</h2>")
+        html_parts.append(f"<p>Completed: {comp_completed} &nbsp;&nbsp; Still Required: {comp_required}</p>")
         html_parts.append(comp_taken.to_html(index=False, escape=False))
 
-        # Technical Electives
+        # TECHNICAL ELECTIVES
+        html_parts.append(f"<h2>🛠 Technical Electives ({program_type} Requirements)</h2>")
+        html_parts.append(f"<p>Total Taken: {total_taken} &nbsp;&nbsp; 400+ Level: {taken_400} &nbsp;&nbsp; 400+ Needed: {remaining_400}</p>")
         if tech_taken is not None and not tech_taken.empty:
-            html_parts.append("<h2>Technical Electives</h2>")
             html_parts.append(
                 tech_taken[["Course Code", "Course Name", "Level"]]
                 .sort_values("Level", ascending=False)
                 .reset_index(drop=True)
                 .to_html(index=False, escape=False)
             )
+        else:
+            html_parts.append("<p style='color:red;'>No technical electives marked as completed (Flag = 1)</p>")
 
-        # Program Summary
-        html_parts.append("<h2>Program Summary</h2>")
+        if remaining_400 > 0:
+            html_parts.append(f"<p style='color:red;'>You need {remaining_400} more 400+ level technical electives</p>")
+
+        # PROGRAM SUMMARY
+        html_parts.append("<h2>📊 Program Summary</h2>")
         html_parts.append(summary_df.to_html(escape=False))
 
-        # Combine all HTML parts
-        html_content = html_header + "".join(html_parts)
+        # Combine
+        full_html = "".join(html_parts)
 
-        # Download button
         st.download_button(
-            "📥 Save as HTML",
-            html_content,
+            "📥 Save FULL REPORT as HTML",
+            full_html,
             file_name="course_report.html",
             mime="text/html"
         )
+
 
 if __name__ == "__main__":
     main()
