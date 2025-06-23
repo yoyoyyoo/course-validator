@@ -106,7 +106,7 @@ def main():
         student_df = student_sheets[sheet_name]
         section_titles = student_df.iloc[:, 0].astype(str)
 
-        # CORE COURSES
+        # === CORE COURSES ===
         with st.spinner("Analyzing core courses..."):
             core_start = find_section(section_titles, ["Common core"])
             core_end = find_section(section_titles, ["Program core", "Technical core"])
@@ -150,7 +150,7 @@ def main():
                     if show_ce_note:
                         st.warning("⚠️ Note: For CMPE 223 and ELEC 376, only one course is required.")
 
-        # COMPLEMENTARY STUDIES
+        # === COMPLEMENTARY STUDIES ===
         with st.spinner("Checking complementary studies..."):
             comp_start = find_section(section_titles, ["Complementary studies"])
             comp_end = find_section(section_titles, ["Subtotal complementary"])
@@ -171,7 +171,7 @@ def main():
                     with st.expander("View taken courses"):
                         st.dataframe(comp_taken.reset_index(drop=True))
 
-        # TECHNICAL ELECTIVES
+        # === TECHNICAL ELECTIVES ===
         with st.spinner("Analyzing technical electives..."):
             tech_taken = process_technical_electives(student_df, program_type)
             if tech_taken is not None:
@@ -199,17 +199,18 @@ def main():
                 if remaining_400 > 0:
                     st.warning(f"You need {remaining_400} more 400+ level technical electives")
 
-        # PROGRAM SUMMARY
+        # === PROGRAM SUMMARY ===
         with st.spinner("Loading program summary..."):
+
             summary_start = section_titles.str.contains(r"(program summary)", case=False, na=False)
             if summary_start.any():
                 start_row = summary_start.idxmax()
-                
+
                 possible_end = section_titles.str.contains(r"(total for program|subtotal program|subtotal core|grand total)", case=False, na=False)
                 end_idx = possible_end[possible_end].index
                 end_idx = end_idx[end_idx > start_row]
                 if len(end_idx) > 0:
-                    stop_row = end_idx[0] + 3  # *** +3 rows to include Requirements & Difference rows ***
+                    stop_row = end_idx[0] + 3
                 else:
                     stop_row = start_row + 25
 
@@ -251,72 +252,70 @@ def main():
                         .format(precision=2),
                     use_container_width=True
                 )
+
+                # === FULL HTML EXPORT (Part 6) ===
+                with st.spinner("Preparing full HTML export..."):
+                    html_parts = []
+                    html_parts.append(f"<h1>Course Completion Report — {program_type}</h1>")
+
+                    # Core
+                    html_parts.append(f"<h2>📋 Incomplete Core Courses ({len(core)})</h2>")
+                    if core.empty:
+                        html_parts.append("<p style='color:green;'>✅ All core courses completed</p>")
+                    else:
+                        html_parts.append(core_display.to_html(index=True, escape=False))
+                        if show_ce_note:
+                            html_parts.append("<p style='color:orange;'>⚠️ Note: For CMPE 223 and ELEC 376, only one course is required.</p>")
+
+                    # Complementary
+                    comp_completed = len(comp_taken)
+                    comp_required = max(0, 3 - comp_completed)
+                    html_parts.append("<h2>🧾 Complementary Studies</h2>")
+                    html_parts.append(f"<p>Completed: {comp_completed} &nbsp;&nbsp; Still Required: {comp_required}</p>")
+
+                    if comp_taken.empty:
+                        html_parts.append("<p style='color:red;'>No complementary studies taken yet.</p>")
+                    else:
+                        html_parts.append(comp_taken.to_html(index=False, escape=False))
+
+                    # Technical
+                    html_parts.append(f"<h2>🛠 Technical Electives ({program_type} Requirements)</h2>")
+                    html_parts.append(f"<p>Total Taken: {total_taken} &nbsp;&nbsp; 400+ Level: {taken_400} &nbsp;&nbsp; 400+ Needed: {remaining_400}</p>")
+
+                    if tech_taken is not None and not tech_taken.empty:
+                        html_parts.append(
+                            tech_taken[["Course Code", "Course Name", "Level"]]
+                            .sort_values("Level", ascending=False)
+                            .reset_index(drop=True)
+                            .to_html(index=False, escape=False)
+                        )
+                    else:
+                        html_parts.append("<p style='color:red;'>No technical electives marked as completed (Flag = 1).</p>")
+
+                    if remaining_400 > 0:
+                        html_parts.append(f"<p style='color:red;'>You need {remaining_400} more 400+ level technical electives.</p>")
+
+                    # Program Summary
+                    html_parts.append("<h2>📊 Program Summary</h2>")
+                    html_parts.append(summary_df.to_html(escape=False))
+
+                    full_html = "".join(html_parts)
+
+                    st.download_button(
+                        "📥 Save FULL REPORT as HTML",
+                        full_html,
+                        file_name="course_report.html",
+                        mime="text/html"
+                    )
+
             else:
                 st.info("ℹ️ Program summary not found in the uploaded file.")
-    # FULL HTML EXPORT — WITH FIXED COMPLEMENTARY NOTES
-    with st.spinner("Preparing full HTML export..."):
-        html_parts = []
-        html_parts.append(f"<h1>Course Completion Report — {program_type}</h1>")
-
-        # CORE COURSES
-        html_parts.append(f"<h2>📋 Incomplete Core Courses ({len(core)})</h2>")
-        if core.empty:
-            html_parts.append("<p style='color:green;'>✅ All core courses completed</p>")
-        else:
-            html_parts.append(core_display.to_html(index=True, escape=False))
-            if show_ce_note:
-                html_parts.append("<p style='color:orange;'>⚠️ Note: For CMPE 223 and ELEC 376, only one course is required.</p>")
-
-        # COMPLEMENTARY STUDIES
-        comp_completed = len(comp_taken)
-        comp_required = max(0, 3 - comp_completed)
-        html_parts.append("<h2>🧾 Complementary Studies</h2>")
-        html_parts.append(f"<p>Completed: {comp_completed} &nbsp;&nbsp; Still Required: {comp_required}</p>")
-
-        if comp_taken.empty:
-            html_parts.append("<p style='color:red;'>No complementary studies taken yet.</p>")
-        else:
-            html_parts.append(comp_taken.to_html(index=False, escape=False))
-
-        # TECHNICAL ELECTIVES
-        html_parts.append(f"<h2>🛠 Technical Electives ({program_type} Requirements)</h2>")
-        html_parts.append(f"<p>Total Taken: {total_taken} &nbsp;&nbsp; 400+ Level: {taken_400} &nbsp;&nbsp; 400+ Needed: {remaining_400}</p>")
-
-        if tech_taken is not None and not tech_taken.empty:
-            html_parts.append(
-                tech_taken[["Course Code", "Course Name", "Level"]]
-                .sort_values("Level", ascending=False)
-                .reset_index(drop=True)
-                .to_html(index=False, escape=False)
-            )
-        else:
-            html_parts.append("<p style='color:red;'>No technical electives marked as completed (Flag = 1).</p>")
-
-        if remaining_400 > 0:
-            html_parts.append(f"<p style='color:red;'>You need {remaining_400} more 400+ level technical electives.</p>")
-
-        # PROGRAM SUMMARY
-        html_parts.append("<h2>📊 Program Summary</h2>")
-        html_parts.append(summary_df.to_html(escape=False))
-
-        # Combine
-        full_html = "".join(html_parts)
-
-        st.download_button(
-            "📥 Save FULL REPORT as HTML",
-            full_html,
-            file_name="course_report.html",
-            mime="text/html"
-        )
-
-
 
     except Exception as e:
         st.error(f"❌ Error: {str(e)}")
         with st.expander("Technical details"):
             st.exception(e)
 
-
-
 if __name__ == "__main__":
     main()
+
